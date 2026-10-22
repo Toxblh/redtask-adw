@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/ru/toxblh/RedmineAdw">
+    <file preprocess="xml-stripblanks">ui/window.ui</file>
+    <file>style.css</file>
+    <file alias="icons/scalable/apps/ru.toxblh.RedmineAdw-symbolic.svg">icons/hicolor/symbolic/apps/ru.toxblh.RedmineAdw-symbolic.svg</file>
+  </gresource>
+</gresources>

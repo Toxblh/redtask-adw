@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ru.toxblh.RedmineAdw</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Redmine</name>
+  <summary>Native client for Redmine</summary>
+  <description>
+    <p>Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting,
+    status changes, time tracking, attachments and background notifications.</p>
+    <ul>
+      <li>My issues, watched issues, favorites, projects and search</li>
+      <li>Issue view with comments, changes and time log</li>
+      <li>Status, assignee, progress, priority and all fields including custom ones</li>
+      <li>Notifications about comments, mentions and changes</li>
+    </ul>
+  </description>
+  <developer id="ru.toxblh">
+    <name>Anton Palgunov</name>
+  </developer>
+  <launchable type="desktop-id">ru.toxblh.RedmineAdw.desktop</launchable>
+  <url type="homepage">https://altlinux.space/toxblh/redmine-adw</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Issue list and issue view</caption>
+      <image>https://altlinux.space/toxblh/redmine-adw/raw/branch/master/docs/screenshots/wide-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Mobile layout</caption>
+      <image>https://altlinux.space/toxblh/redmine-adw/raw/branch/master/docs/screenshots/narrow-light.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#f66151</color>
+    <color type="primary" scheme_preference="dark">#a51d2d</color>
+  </branding>
+  <releases>
+    <release version="0.1.0" date="2026-10-22"/>
+  </releases>
+</component>

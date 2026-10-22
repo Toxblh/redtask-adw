@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="redmine-adw">
+  <schema id="ru.toxblh.RedmineAdw" path="/ru/toxblh/RedmineAdw/">
+    <!-- учётка; сам ключ API — в Secret Service, не здесь -->
+    <key name="server-url" type="s"><default>''</default></key>
+    <key name="user-id" type="i"><default>0</default></key>
+    <key name="user-name" type="s"><default>''</default></key>
+    <key name="user-login" type="s"><default>''</default></key>
+
+    <key name="favorites" type="ai"><default>[]</default><summary>Избранные задачи</summary></key>
+    <key name="comments-newest-first" type="b"><default>true</default></key>
+    <key name="issue-tab" type="s"><default>'comments'</default></key>
+
+    <key name="notifications-enabled" type="b"><default>true</default></key>
+    <key name="poll-interval" type="i"><default>15</default><summary>Интервал проверки, мин</summary></key>
+    <key name="last-check" type="x"><default>0</default></key>
+    <key name="run-in-background" type="b"><default>false</default>
+      <summary>Проверять уведомления при закрытом окне и запускаться при входе</summary></key>
+    <key name="notif-muted" type="as"><default>['other', 'new_issue']</default><summary>Выключенные категории</summary></key>
+    <key name="notif-scope-assigned" type="b"><default>true</default></key>
+    <key name="notif-scope-authored" type="b"><default>true</default></key>
+    <key name="notif-scope-watched" type="b"><default>true</default></key>
+    <key name="notif-favorites-only" type="b"><default>false</default></key>
+    <key name="notif-status-closed-only" type="b"><default>false</default></key>
+    <key name="notif-priority-raised-only" type="b"><default>false</default></key>
+    <key name="muted-issues" type="as"><default>[]</default><summary>Задачи без уведомлений, «id|тема»</summary></key>
+    <key name="muted-projects" type="as"><default>[]</default><summary>Проекты без уведомлений, «id|название»</summary></key>
+    <key name="notif-by-issue" type="b"><default>false</default><summary>Колокольчик: по задачам вместо ленты</summary></key>
+
+    <key name="window-width" type="i"><default>1100</default></key>
+    <key name="window-height" type="i"><default>720</default></key>
+    <key name="window-maximized" type="b"><default>false</default></key>
+  </schema>
+</schemalist>

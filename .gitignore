@@ -1,0 +1,7 @@
+.env*
+build/
+_build/
+.flatpak-builder/
+flatpak-repo/
+epm.lock
+*.flatpak

@@ -1,0 +1,39 @@
+/* Только оформление разметки текста. Цвета — от темы (currentColor, переменные Adwaita), своих нет. */
+.rich-quote {
+  border-left: 3px solid alpha(currentColor, 0.25);
+  padding-left: 10px;
+}
+.rich-code {
+  font-family: monospace;
+  background-color: alpha(currentColor, 0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.rich-table {
+  border: 1px solid alpha(currentColor, 0.15);
+  border-radius: 6px;
+}
+.rich-table > label {
+  padding: 4px 8px;
+  border-bottom: 1px solid alpha(currentColor, 0.08);
+}
+.rich-image {
+  border-radius: 6px;
+}
+.issue-row {
+  padding: 8px 6px;
+}
+.unread-dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 4px;
+  background-color: var(--accent-bg-color);
+}
+.journal-private {
+  border-left: 3px solid var(--warning-color);
+  padding-left: 9px;
+}
+.highlight-note {
+  background-color: alpha(var(--accent-color), 0.12);
+  border-radius: 12px;
+}
