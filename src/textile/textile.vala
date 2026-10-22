@@ -64,7 +64,7 @@ namespace Textile {
         _entity = re ("&(amp|lt|gt|quot|apos|nbsp|#\\d{1,7}|#[xX][0-9a-fA-F]{1,6});");
         _preopen = re ("<pre(?:\\s[^<>]*)?>");
         _codetag = re ("</?code(?:\\s[^<>]*)?>");
-        _cellmod = re ("""^((?:_|\\\d+|/\d+|[<>=^~]|\{[^}]*\}){1,8})\.(?:\s+|$)(.*)""", RegexCompileFlags.DOTALL);
+        _cellmod = re ("""^((?:_|\\\d+|/\d+|[<>=^~]|\{[^}]*\}){1,8})\.\s*(.*)""", RegexCompileFlags.DOTALL);
         _cellspan = re ("""\\(\d+)""");
     }
 

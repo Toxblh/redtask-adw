@@ -13,6 +13,9 @@ void test_blocks () {
     assert (blocks[2].lines[1].level == 1);
     assert (blocks[2].lines[2].number == 1 && blocks[2].lines[3].number == 2);
     assert (kinds[3] == BlockKind.TABLE && blocks[3].lines[0].cells[0].header && blocks[3].lines[1].cells[1].text == "2");
+    // RedCloth не требует пробела после «.»: так пишут шаблоны полей на сервере
+    var hc = parse_cells ("|_.Статья |_.б/н |");
+    assert (hc[0].header && hc[0].text == "Статья" && hc[1].header && hc[1].text == "б/н");
     assert (kinds[4] == BlockKind.CODE && blocks[4].lines.length == 2 && blocks[4].lines[1].text == "  строка");
     assert (kinds[5] == BlockKind.RULE);
     assert (kinds[6] == BlockKind.IMAGE && blocks[6].lines[0].text == "img.png");
