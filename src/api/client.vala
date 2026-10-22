@@ -620,6 +620,11 @@ namespace Redmine {
             }
         }
 
+        /** /users/:id открыт и не-админу: логин, created_on, last_login_on. */
+        public async Json.Object user (int user_id) throws Error {
+            return jobj (yield get_obj ("users/%d.json".printf (user_id)), "user");
+        }
+
         // ---------- файлы ----------
         /** Скачивает содержимое (вложения) с авторизацией ключом. */
         public async Bytes download (string u, Cancellable? c = null) throws Error {

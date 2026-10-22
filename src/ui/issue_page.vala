@@ -504,9 +504,12 @@ namespace Redmine {
             var subj = new Gtk.Label (i.subject) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, selectable = true, margin_top = 4 };
             subj.add_css_class ("title-2");
             body.append (subj);
-            var by = new Gtk.Label (_("Created by %s · %s").printf (i.author.name, format_datetime (i.created_on))
-                + (i.is_private ? " · " + _("private") : "")) { xalign = 0, wrap = true, margin_top = 4 };
+            // автор — ссылкой на карточку (курсор-указатель и Tab по ссылке даёт сам GtkLabel)
+            var by = new Gtk.Label (Markup.escape_text (_("Created by %s · %s")).printf ("<a href=\"user:%d\">%s</a>".printf (i.author.id, Markup.escape_text (i.author.name)),
+                Markup.escape_text (format_datetime (i.created_on))) + (i.is_private ? " · " + Markup.escape_text (_("private")) : "")) { xalign = 0, wrap = true, margin_top = 4, use_markup = true };
             by.add_css_class ("dim-label");
+            var author = i.author;
+            by.activate_link.connect ((uri) => { new PersonCard (author.id, author.name).present (this); return true; });
             body.append (by);
 
             // поля
@@ -516,7 +519,13 @@ namespace Redmine {
             prop (props, _("Priority"), i.priority.name);
             var a = i.assigned_to;
             var asg = prop (props, _("Assignee"), a != null ? a.name : _("Not assigned"));
-            if (a != null) asg.add_prefix (Avatars.make (a.id, a.name, 32));
+            if (a != null) {
+                asg.add_prefix (Avatars.make (a.id, a.name, 32));
+                asg.activatable = true;
+                asg.tooltip_text = _("Profile of %s").printf (a.name);
+                asg.activated.connect (() => new PersonCard (a.id, a.name).present (this));
+                asg.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
+            }
             var me = App.get ().session.user_id;
             if ((a == null || a.id != me) && can_edit ()) {
                 var take = new Gtk.Button.with_label (_("Take")) { valign = Gtk.Align.CENTER, tooltip_text = _("Assign to Me"), action_name = "issue.assign-me" };
@@ -732,14 +741,11 @@ namespace Redmine {
             section_header (_("Watchers") + " %u".printf (ws.length), null, null);
             var wrap = new Adw.WrapBox () { child_spacing = 6, line_spacing = 6 };
             foreach (var w in ws) {
-                var b = new Gtk.Button () { tooltip_text = jstr (w, "name") };
                 var c = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
                 c.append (Avatars.make (jint (w, "id"), jstr (w, "name"), 24));
                 c.append (new Gtk.Label (jstr (w, "name")));
-                b.child = c;
-                b.add_css_class ("flat");
-                var id = jint (w, "id");
-                b.clicked.connect (() => new PersonDialog (id).present (this));
+                var b = person_button (jint (w, "id"), jstr (w, "name"), c);
+                b.remove_css_class ("person-link"); // в обёртке — обычная плоская кнопка с отступами
                 wrap.append (b);
             }
             body.append (wrap);
@@ -779,8 +785,9 @@ namespace Redmine {
 
         private Gtk.Widget header_line (int user_id, string user, string when, string? extra, Gtk.Widget? menu) {
             var row = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
-            row.append (Avatars.make (user_id, user, 32));
-            var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { hexpand = true, valign = Gtk.Align.CENTER };
+            var who = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
+            who.append (Avatars.make (user_id, user, 32));
+            var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { valign = Gtk.Align.CENTER };
             var n = new Gtk.Label (user) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
             n.add_css_class ("heading");
             col.append (n);
@@ -788,7 +795,12 @@ namespace Redmine {
             w.add_css_class ("dim-label");
             w.add_css_class ("caption");
             col.append (w);
-            row.append (col);
+            who.append (col);
+            // аватар, имя и дата — одна кнопка на карточку; до меню справа — пусто, мимо не промахнуться
+            var b = person_button (user_id, user, who);
+            b.halign = Gtk.Align.START;
+            row.append (b);
+            row.append (new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) { hexpand = true });
             if (menu != null) row.append (menu);
             return row;
         }

@@ -53,3 +53,8 @@
 row.closed-issue .title {
   text-decoration-line: line-through;
 }
+/* Кнопка «аватар + имя» в ленте: обычная зона нажатия, но текст стоит на месте, как без кнопки. */
+button.person-link {
+  padding: 4px 6px;
+  margin: -4px -6px;
+}

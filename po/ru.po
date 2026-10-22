@@ -1030,6 +1030,30 @@ msgstr "Табельный №"
 msgid "Open Profile in Redmine"
 msgstr "Открыть профиль в Redmine"
 
+msgid "Manager"
+msgstr "Руководитель"
+
+msgid "Phone"
+msgstr "Телефон"
+
+msgid "Registered"
+msgstr "Зарегистрирован(а)"
+
+msgid "Last sign-in"
+msgstr "Последний вход"
+
+msgid "About"
+msgstr "О себе"
+
+msgid "Copy"
+msgstr "Копировать"
+
+msgid "Copied"
+msgstr "Скопировано"
+
+msgid "Profile of %s"
+msgstr "Карточка: %s"
+
 msgid "No Connection"
 msgstr "Нет подключения"
 

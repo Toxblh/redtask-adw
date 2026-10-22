@@ -3,6 +3,7 @@ namespace Redmine {
      * Скриншоты для README/metainfo и визуальной проверки: REDMINE_ADW_SHOT=путь.png — через REDMINE_ADW_SHOT_DELAY мс
      * окно рендерится само в PNG (Wayland не даёт снимать чужие окна) и приложение выходит.
      * REDMINE_ADW_SHOT_SIZE=ШxВ, REDMINE_ADW_SHOT_ISSUE=номер — открыть задачу, REDMINE_ADW_SHOT_SECTION=имя раздела.
+     * REDMINE_ADW_SHOT_PERSON=id — открыть карточку человека.
      * REDMINE_ADW_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
      */
     namespace Shots {
@@ -20,6 +21,9 @@ namespace Redmine {
                 if (issue != null) w.open_issue (int.parse (issue));
                 return Source.REMOVE;
             });
+            // REDMINE_ADW_SHOT_PERSON=id — карточка человека
+            var person = Environment.get_variable ("REDMINE_ADW_SHOT_PERSON");
+            if (person != null) Timeout.add (delay * 3 / 4, () => { new PersonCard (int.parse (person)).present (w); return Source.REMOVE; });
             // REDMINE_ADW_SHOT_ACTION=issue.edit | win.new-issue | app.preferences — открыть диалог для снимка
             var action = Environment.get_variable ("REDMINE_ADW_SHOT_ACTION");
             if (action != null) Timeout.add (delay * 3 / 4, () => {

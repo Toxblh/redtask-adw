@@ -16,6 +16,7 @@ src/ui/issue_page.vala
 src/ui/lists.vala
 src/ui/login.vala
 src/ui/notifications.vala
+src/ui/person.vala
 src/ui/preferences.vala
 src/ui/rich_text.vala
 src/ui/shots.vala

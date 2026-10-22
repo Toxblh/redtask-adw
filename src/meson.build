@@ -16,6 +16,7 @@ app_sources = core_sources + files(
   'ui/login.vala',
   'ui/widgets.vala',
   'ui/rich_text.vala',
+  'ui/person.vala',
   'ui/lists.vala',
   'ui/notifications.vala',
   'ui/issue_page.vala',
