@@ -7,7 +7,8 @@
     <key name="user-name" type="s"><default>''</default></key>
     <key name="user-login" type="s"><default>''</default></key>
 
-    <key name="favorites" type="ai"><default>[]</default><summary>Избранные задачи</summary></key>
+    <key name="favorites" type="ai"><default>[]</default><summary>Прежнее локальное избранное: переносится на сервер и стирается</summary></key>
+    <key name="favorites-migrated" type="b"><default>false</default><summary>Локальное избранное перенесено на сервер</summary></key>
     <key name="comments-newest-first" type="b"><default>true</default></key>
     <key name="issue-tab" type="s"><default>'comments'</default></key>
 

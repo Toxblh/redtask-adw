@@ -109,6 +109,68 @@ namespace Redmine {
         return s;
     }
 
+    /** Нет веб-сессии (или протухла): запись избранного — только через вход на сайте. Код 401. */
+    public Error no_web_session () {
+        return http_error (401, _("Favorites are saved through the website: sign in there"));
+    }
+
+    /** Запрос куками веб-сессии, без ключа API; капчу WAF (200 + HTML без X-Request-Id) повторяем, как Client.raw. */
+    private async Resp web_send (Soup.Session ss, string method, string u, string accept, string? csrf) throws Error {
+        for (int attempt = 0; ; attempt++) {
+            var msg = new Soup.Message (method, u);
+            msg.flags |= Soup.MessageFlags.NO_REDIRECT;
+            msg.request_headers.replace ("Accept", accept);
+            if (csrf != null) {
+                msg.request_headers.replace ("X-CSRF-Token", csrf);
+                msg.request_headers.replace ("X-Requested-With", "XMLHttpRequest");
+            }
+            Bytes body;
+            try {
+                body = yield ss.send_and_read_async (msg, Priority.DEFAULT, null);
+            } catch (Error e) {
+                throw http_error (0, e.message);
+            }
+            var ct = msg.response_headers.get_content_type (null);
+            bool waf = msg.status_code == 200 && ct != null && ct.contains ("html") && msg.response_headers.get_one ("X-Request-Id") == null;
+            if (waf && attempt < WAF_RETRIES) { yield sleep_ms (300 * (attempt + 1)); continue; }
+            if (waf) throw http_error (200, _("Server asks for a captcha (Security check)"));
+            return new Resp () { body = body, msg = msg };
+        }
+    }
+
+    /**
+     * Серверное избранное (плагин favourites). Ключ API плагин не принимает (401/403) — пишем как сайт:
+     * куки веб-сессии WebKit, CSRF со страницы задачи; POST /favourites/fav ставит, DELETE снимает
+     * (rails-ujs шлёт data-method ссылки как метод запроса). Текущее состояние берём с той же страницы:
+     * уже так (поставили с другого устройства) — ничего не шлём.
+     */
+    public async void web_favourite (string server, int id, bool on) throws Error {
+        var cm = web_session ().get_cookie_manager ();
+        var jar = new Soup.CookieJar ();
+        foreach (unowned Soup.Cookie c in yield cm.get_cookies (server + "/", null)) jar.add_cookie (c.copy ());
+        var ss = new Soup.Session () { timeout = 40, user_agent = WafGate.get_default ().browser_agent ?? new WebKit.Settings ().user_agent };
+        ss.add_feature (jar);
+        var page = yield web_send (ss, "GET", "%s/issues/%d".printf (server, id), "text/html", null);
+        var code = page.msg.status_code;
+        if (code == 404 || code == 403) throw http_error ((int) code, code == 404 ? _("Not found") : _("Forbidden"));
+        if (code != 200) throw no_web_session (); // 302 на /login
+        var html = page.text ();
+        var state = fav_link_state (html, id);
+        var token = csrf_token (html);
+        if (state < 0 || token == null) throw no_web_session ();
+        if ((state == 1) != on) {
+            var r = yield web_send (ss, on ? "POST" : "DELETE",
+                "%s/favourites/fav?object_id=%d&object_type=issue".printf (server, id), "text/javascript", token);
+            code = r.msg.status_code;
+            if (code == 401 || code == 422 || (code >= 300 && code < 400)) throw no_web_session ();
+            if (code < 200 || code >= 300) throw http_error ((int) code, "HTTP %u".printf (code));
+        }
+        // обновлённые сервером куки (сессия Rails) — обратно в WebKit
+        foreach (var c in jar.all_cookies ()) {
+            try { yield cm.add_cookie (c, null); } catch (Error e) {}
+        }
+    }
+
     /**
      * Вход через сайт: WebKit с формой логина Redmine. Сервер за WAF («Security check»): веб-запросы от не-браузера
      * он встречает капчей, поэтому ключ забираем fetch'ем ИЗ контекста страницы, где куки и репутация браузера уже есть.
@@ -116,13 +178,17 @@ namespace Redmine {
      */
     public class WebLoginDialog : Adw.Dialog {
         public signal void failed (string message);
+        /** web_only: нужна только веб-сессия (запись избранного) — ключ не забираем, вход не пересоздаём. */
+        public signal void web_ready ();
+        private bool web_only;
         private WebKit.WebView web;
         private string server;
         private uint timer = 0;
         private bool busy = false;
         private Gtk.Label hint;
 
-        public WebLoginDialog (string server_raw) {
+        public WebLoginDialog (string server_raw, bool web_only = false) {
+            this.web_only = web_only;
             var s = server_raw;
             while (s.has_suffix ("/")) s = s.substring (0, s.length - 1);
             if (!s.has_prefix ("http")) s = "https://" + s;
@@ -155,6 +221,19 @@ namespace Redmine {
             var uri = web.uri ?? "";
             if (!uri.has_prefix (server) || uri.contains ("/login")) return;
             busy = true;
+            if (web_only) {
+                try {
+                    var ok = yield web.call_async_javascript_function ("return !!document.querySelector('#loggedas')", -1, null, null, null, null);
+                    if (ok.to_boolean ()) {
+                        if (timer != 0) Source.remove (timer);
+                        timer = 0;
+                        web_ready ();
+                        close ();
+                    }
+                } catch (Error e) {}
+                busy = false;
+                return;
+            }
             try {
                 var v = yield web.call_async_javascript_function (
                     "let k='';try{const r=await fetch('/users/current.json',{credentials:'same-origin'});k=(JSON.parse(await r.text()).user||{}).api_key||''}catch(e){}" +

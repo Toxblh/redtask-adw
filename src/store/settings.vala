@@ -16,25 +16,13 @@ namespace Redmine {
         public string user_name { owned get { return s.get_string ("user-name"); } }
         public string user_login { owned get { return s.get_string ("user-login"); } }
 
-        // ---- избранное ----
-        public bool is_favorite (int id) {
-            foreach (var x in favorites ()) if (x == id) return true;
-            return false;
-        }
+        /** Прежнее локальное избранное — только для переноса на сервер (Favorites.migrate). */
         public int[] favorites () {
             var v = s.get_value ("favorites");
             int[] res = {};
             for (size_t i = 0; i < v.n_children (); i++) res += v.get_child_value (i).get_int32 ();
             return res;
         }
-        public void toggle_favorite (int id) {
-            var b = new VariantBuilder (new VariantType ("ai"));
-            bool had = false;
-            foreach (var x in favorites ()) { if (x == id) had = true; else b.add ("i", x); }
-            if (!had) b.add ("i", id);
-            s.set_value ("favorites", b.end ());
-        }
-
         // ---- отключённые задачи/проекты: «id|название» ----
         public HashTable<int, string> muted (string key) {
             var res = new HashTable<int, string> (direct_hash, direct_equal);
@@ -68,7 +56,7 @@ namespace Redmine {
             var k = (s.get_boolean ("notif-scope-assigned") ? "1" : "0") + (s.get_boolean ("notif-scope-authored") ? "1" : "0")
                 + (s.get_boolean ("notif-scope-watched") ? "1" : "0") + (s.get_boolean ("notif-favorites-only") ? "1" : "0");
             if (s.get_boolean ("notif-favorites-only")) {
-                var f = favorites ();
+                var f = Favorites.get_default ().all ();
                 qsort_with_data<int> (f, sizeof (int), (a, b) => a - b);
                 var parts = new GenericArray<string> ();
                 foreach (var x in f) parts.add (x.to_string ());

@@ -94,7 +94,8 @@ namespace Redmine {
             complete = true;
             var fav_only = p.s.get_boolean ("notif-favorites-only");
             var favs = new GenericSet<int> (direct_hash, direct_equal);
-            foreach (var x in p.favorites ()) favs.add (x);
+            if (fav_only) yield Favorites.get_default ().refresh ();
+            foreach (var x in Favorites.get_default ().all ()) favs.add (x);
             if (fav_only && favs.length == 0) return res;
             for (int src = 0; src < 3; src++) {
                 var q = new IssueQuery ();

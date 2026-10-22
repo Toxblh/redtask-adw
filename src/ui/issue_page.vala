@@ -91,11 +91,20 @@ namespace Redmine {
             menu_btn = new Gtk.MenuButton () { icon_name = "view-more-symbolic", tooltip_text = _("Issue Menu") };
             hb.pack_end (menu_btn);
             star = new Gtk.ToggleButton () { icon_name = "non-starred-symbolic" };
-            star.active = Prefs.get_default ().is_favorite (id);
+            var favs = Favorites.get_default ();
+            star.active = favs.has (id);
             sync_star ();
             star.toggled.connect (() => {
-                if (star.active != Prefs.get_default ().is_favorite (issue_id)) Prefs.get_default ().toggle_favorite (issue_id);
                 sync_star ();
+                var on = star.active;
+                if (on == favs.has (issue_id)) return; // отражение набора, а не нажатие
+                favs.set_favorite.begin (issue_id, on, (o, r) => {
+                    try {
+                        favs.set_favorite.end (r);
+                    } catch (Error e) {
+                        win_of (this)?.favorite_failed (e, issue_id, on);
+                    }
+                });
             });
             hb.pack_end (star);
 
@@ -127,9 +136,7 @@ namespace Redmine {
             child = tv;
 
             setup_actions ();
-            Prefs.get_default ().s.changed["favorites"].connect (() => {
-                star.active = Prefs.get_default ().is_favorite (issue_id);
-            });
+            favs.changed.connect (() => star.active = favs.has (issue_id));
             state.loading ();
             load.begin ();
             App.get ().poller.withdraw_issue (id);
@@ -160,6 +167,7 @@ namespace Redmine {
         private async void load () {
             var s = App.get ().session;
             if (s == null) return;
+            Favorites.get_default ().refresh.begin (); // звезда — по серверу: могли поменять на сайте
             var my = ++gen;
             // мгновенно — из кэша (stale-while-revalidate), потом — свежая с сервера
             if (issue == null) {

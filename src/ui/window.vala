@@ -105,6 +105,24 @@ namespace Redmine {
             toast (e.message.length > 0 ? e.message : _("Something went wrong"), 5);
         }
 
+        /** Звезда не записалась (откат уже сделан): без веб-сессии — вход через сайт и повтор. */
+        public void favorite_failed (Error e, int id, bool on) {
+            var s = App.get ().session;
+            if (error_code (e) != 401 || s == null) { toast_error (e); return; }
+            var t = new Adw.Toast (e.message) { timeout = 0, button_label = _("Sign In on Website") };
+            t.button_clicked.connect (() => {
+                var d = new WebLoginDialog (s.server, true);
+                d.web_ready.connect (() => {
+                    var f = Favorites.get_default ();
+                    f.set_favorite.begin (id, on, (o, r) => {
+                        try { f.set_favorite.end (r); } catch (Error e2) { toast_error (e2); }
+                    });
+                });
+                d.present (this);
+            });
+            toasts.add_toast (t);
+        }
+
         public void show_login () {
             if (login_view == null) {
                 login_view = new LoginView ();

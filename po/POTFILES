@@ -9,6 +9,7 @@ src/notify/rules.vala
 src/store/cache.vala
 src/store/notif_store.vala
 src/store/settings.vala
+src/store/favorites.vala
 src/textile/textile.vala
 src/ui/editor.vala
 src/ui/issue_dialogs.vala

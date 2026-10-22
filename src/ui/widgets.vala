@@ -59,6 +59,9 @@ namespace Redmine {
     /** Строка списка — раскладка карточки IssueCard с Android. */
     public class IssueRow : Gtk.ListBoxRow {
         public Issue issue;
+        private Gtk.Image star;
+
+        public void sync_star () { star.visible = Favorites.get_default ().has (issue.id); }
 
         private static Gtk.Label caption (string text, bool dim = true) {
             var l = new Gtk.Label (text) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
@@ -82,11 +85,10 @@ namespace Redmine {
             tr.add_css_class ("numeric");
             top.append (tr);
             top.append (caption (format_relative (i.updated_on)));
-            if (Prefs.get_default ().is_favorite (i.id)) {
-                var star = new Gtk.Image.from_icon_name ("starred-symbolic") { tooltip_text = _("Favorite") };
-                star.add_css_class ("dim-label");
-                top.append (star);
-            }
+            star = new Gtk.Image.from_icon_name ("starred-symbolic") { tooltip_text = _("Favorite") };
+            star.add_css_class ("dim-label");
+            top.append (star);
+            sync_star ();
             box.append (top);
 
             var subj = new Gtk.Label (i.subject) {

@@ -81,8 +81,9 @@ namespace Redmine {
             slide.add_child (old_snap);
             append (slide);
             setup_swipe ();
-            Prefs.get_default ().s.changed["favorites"].connect (() => {
-                if (kind == ListKind.FAVORITES) reload (false);
+            Favorites.get_default ().changed.connect (() => {
+                if (kind == ListKind.FAVORITES && loaded_once) reload (false);
+                for (var r = list.get_first_child (); r != null; r = r.get_next_sibling ()) (r as IssueRow)?.sync_star ();
             });
         }
 
@@ -175,6 +176,7 @@ namespace Redmine {
             q.status = filter.active_name;
             q.assigned_to_me = kind == ListKind.MINE;
             q.watched_by_me = kind == ListKind.WATCHED;
+            q.favourite = kind == ListKind.FAVORITES;
             q.project_id = project_id;
             q.limit = 50;
             return q;
@@ -183,24 +185,9 @@ namespace Redmine {
         private async void fetch (Session s, int my_gen) {
             loading = true;
             try {
-                GenericArray<Issue> got;
-                if (kind == ListKind.FAVORITES) {
-                    int[] missing;
-                    var all = yield s.api.issues_by_ids (Prefs.get_default ().favorites (), out missing);
-                    got = new GenericArray<Issue> ();
-                    var f = filter.active_name;
-                    foreach (var i in all) if (f == "*" || (f == "open") != i.status_closed) got.add (i);
-                    total = got.length;
-                    if (my_gen == gen && missing.length > 0) {
-                        var parts = new GenericArray<string> ();
-                        foreach (var id in missing) parts.add ("#%d".printf (id));
-                        win_of (this)?.toast (_("Unavailable (deleted or no access): %s").printf (string.joinv (", ", parts.data)));
-                    }
-                } else {
-                    var page = yield s.api.issues (query ());
-                    got = page.issues;
-                    total = page.total;
-                }
+                var page = yield s.api.issues (query ());
+                var got = page.issues;
+                total = page.total;
                 if (my_gen != gen) return;
                 items = got;
                 fill (got);
@@ -220,7 +207,7 @@ namespace Redmine {
 
         private async void load_more () {
             var s = App.get ().session;
-            if (s == null || loading || kind == ListKind.FAVORITES || items.length >= total) return;
+            if (s == null || loading || items.length >= total) return;
             loading = true;
             var my_gen = gen;
             var spinner_row = new Gtk.ListBoxRow () { selectable = false, activatable = false };

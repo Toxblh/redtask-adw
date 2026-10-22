@@ -12,6 +12,7 @@ app_sources = core_sources + files(
   'store/settings.vala',
   'store/cache.vala',
   'store/notif_store.vala',
+  'store/favorites.vala',
   'notify/poller.vala',
   'ui/window.vala',
   'ui/login.vala',

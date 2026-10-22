@@ -63,6 +63,8 @@ namespace Redmine {
         public bool assigned_to_me = false;
         public bool watched_by_me = false;
         public bool authored_by_me = false;
+        /** Серверное избранное (плагин favourites). */
+        public bool favourite = false;
         public string status = "open"; // open | closed | *
         public int parent_id = 0;
         public string? subject = null;
@@ -73,7 +75,7 @@ namespace Redmine {
         public IssueQuery copy () {
             var q = new IssueQuery ();
             q.project_id = project_id; q.assigned_to_me = assigned_to_me; q.watched_by_me = watched_by_me;
-            q.authored_by_me = authored_by_me; q.status = status; q.parent_id = parent_id; q.subject = subject;
+            q.authored_by_me = authored_by_me; q.favourite = favourite; q.status = status; q.parent_id = parent_id; q.subject = subject;
             q.updated_since = updated_since; q.sort = sort; q.limit = limit; q.offset = offset;
             return q;
         }
@@ -84,7 +86,7 @@ namespace Redmine {
         public int total = 0;
     }
 
-    private const int WAF_RETRIES = 3;
+    internal const int WAF_RETRIES = 3;
 
     public class Resp {
         public Bytes body;
@@ -367,6 +369,12 @@ namespace Redmine {
 
         // ---------- задачи ----------
         public async IssueChunk issues (IssueQuery q, Cancellable? c = null) throws Error {
+            // фильтр плагина — только полной формой f[]/op/v, и тогда статус тоже в ней: простые параметры сервер не смешивает
+            if (q.favourite) return page_of (yield get_obj ("issues.json", new Query ()
+                .add ("set_filter", "1")
+                .add ("f[]", "favourite_state").add ("op[favourite_state]", "=").add ("v[favourite_state][]", "Избранные задачи")
+                .add ("f[]", "status_id").add ("op[status_id]", q.status == "open" ? "o" : (q.status == "closed" ? "c" : "*"))
+                .add ("sort", q.sort).add ("limit", q.limit.to_string ()).add ("offset", q.offset.to_string ()), c));
             var query = new Query ()
                 .add ("limit", q.limit.to_string ())
                 .add ("offset", q.offset.to_string ())
@@ -387,6 +395,20 @@ namespace Redmine {
             foreach (var i in jarr (o, "issues")) p.issues.add (new Issue (i));
             p.total = jint (o, "total_count");
             return p;
+        }
+
+        /** Номера всех задач серверного избранного (любой статус), все страницы. */
+        public async GenericSet<int> favourite_ids () throws Error {
+            var res = new GenericSet<int> (direct_hash, direct_equal);
+            var q = new IssueQuery () { favourite = true, status = "*", sort = "id:desc", limit = 100 };
+            // ponytail: потолок 2000 задач (20 запросов)
+            for (int n = 0; n < 20; n++) {
+                var page = yield issues (q);
+                foreach (var i in page.issues) res.add (i.id);
+                q.offset += page.issues.length;
+                if (page.issues.length == 0 || q.offset >= page.total) break;
+            }
+            return res;
         }
 
         /** Задачи по id пачками по 100, в порядке запроса; недоступные/удалённые — в missing. */

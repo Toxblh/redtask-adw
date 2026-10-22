@@ -123,4 +123,33 @@ namespace Redmine {
             && (target.get_scheme () == "https" || base_uri.get_scheme () != "https");
     }
 
+
+    /**
+     * Звезда плагина favourites на HTML-странице задачи: 1 — в избранном (ссылка data-method="delete"),
+     * 0 — нет (data-method="post"), -1 — ссылки нет: на сайте не вошли (или плагина нет).
+     */
+    public int fav_link_state (string html, int id) {
+        var i = html.index_of ("issue-%d-favourite".printf (id));
+        if (i < 0) return -1;
+        var end = html.index_of (">", i);
+        var tag = end < 0 ? html.substring (i) : html.substring (i, end - i);
+        if (tag.contains ("data-method=\"delete\"")) return 1;
+        if (tag.contains ("data-method=\"post\"")) return 0;
+        return -1;
+    }
+
+    /** CSRF-токен Rails из <meta name="csrf-token">; null — его нет. */
+    public string? csrf_token (string html) {
+        MatchInfo m;
+        if (/<meta name="csrf-token" content="([^"]+)"/.match (html, 0, out m)) return m.fetch (1);
+        return null;
+    }
+
+    /** Миграция: локальные избранные, которых нет на сервере, без повторов, в прежнем порядке. */
+    public int[] fav_to_migrate (int[] local, GenericSet<int> server) {
+        var seen = new GenericSet<int> (direct_hash, direct_equal);
+        int[] res = {};
+        foreach (var id in local) if (id > 0 && !server.contains (id) && !seen.contains (id)) { seen.add (id); res += id; }
+        return res;
+    }
 }

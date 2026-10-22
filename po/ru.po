@@ -769,6 +769,12 @@ msgstr "_Повторить"
 msgid "Nothing Here Yet"
 msgstr "Пока пусто"
 
+msgid "Favorites are saved through the website: sign in there"
+msgstr "Избранное сохраняется через сайт: войдите на нём"
+
+msgid "Sign In on Website"
+msgstr "Войти через сайт"
+
 msgid "Unavailable (deleted or no access): %s"
 msgstr "Недоступны (удалены или нет доступа): %s"
 

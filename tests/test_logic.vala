@@ -144,6 +144,26 @@ void test_server_link () {
     assert (ServerLink.parse (R, "https://host.example/redmine/projects/x").project == "x");
 }
 
+void test_favourites () {
+    // как на странице задачи: ссылка плагина вставляется скриптом; состояние — по data-method
+    var on = "<meta name=\"csrf-token\" content=\"pq_x-1\" />\n$(link).before('<a class=\"issue-244551-favourite icon icon-favourites-on\" data-remote=\"true\" rel=\"nofollow\" data-method=\"delete\" href=\"/favourites/fav?object_id=244551&amp;object_type=issue\">Убрать из избранного</a>')";
+    var off = "<a class=\"issue-244293-favourite icon icon-favourites-off\" data-remote=\"true\" rel=\"nofollow\" data-method=\"post\" href=\"/favourites/fav?object_id=244293&amp;object_type=issue\">Добавить в избранное</a>"
+        + "<a class=\"issue-244293-watcher icon icon-fav\" data-method=\"delete\" href=\"/watchers/watch\">";
+    assert (fav_link_state (on, 244551) == 1);
+    assert (fav_link_state (off, 244293) == 0); // «Не следить» с delete рядом — не звезда
+    assert (fav_link_state (off, 24429) == -1); // чужой номер-префикс
+    assert (fav_link_state ("<a href=\"/login\">Войти</a>", 244293) == -1); // не вошли на сайт
+    assert (csrf_token (on) == "pq_x-1");
+    assert (csrf_token (off) == null);
+    // миграция: только то, чего нет на сервере, без повторов и мусора, в прежнем порядке
+    var server = new GenericSet<int> (direct_hash, direct_equal);
+    server.add (244551);
+    var todo = fav_to_migrate ({ 5, 244551, 7, 5, 0 }, server);
+    assert (todo.length == 2 && todo[0] == 5 && todo[1] == 7);
+    assert (fav_to_migrate ({}, server).length == 0);
+    assert (fav_to_migrate ({ 244551 }, server).length == 0);
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -154,5 +174,6 @@ int main (string[] args) {
     Test.add_func ("/logic/group", test_group);
     Test.add_func ("/logic/waf", test_waf);
     Test.add_func ("/logic/server-link", test_server_link);
+    Test.add_func ("/logic/favourites", test_favourites);
     return Test.run ();
 }
