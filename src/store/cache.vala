@@ -272,13 +272,59 @@ namespace Redmine {
             return res;
         }
 
-        public async Json.Object person (int id) throws Error {
+        /** Сохранённое любого возраста (показать сразу); fresh — моложе суток, сеть не нужна. */
+        public Json.Object? cached (string key, out bool fresh) {
+            var h = cache.load (key);
+            fresh = h != null && cache.load (key, DAY_MS) != null;
+            return h != null && h.get_node_type () == Json.NodeType.OBJECT ? h.get_object () : null;
+        }
+
+        /** /users/:id (логин, регистрация, последний вход): кэш сутки, net — мимо кэша. */
+        public async Json.Object user (int id, bool net = false) throws Error {
+            var key = "user-%d".printf (id);
+            var h = net ? null : cache.load (key, DAY_MS);
+            if (h != null && h.get_node_type () == Json.NodeType.OBJECT) return h.get_object ();
+            var u = yield api.user (id);
+            cache.save (key, obj_node (u));
+            return u;
+        }
+
+        public async Json.Object person (int id, bool net = false) throws Error {
             var key = "person-%d".printf (id);
-            var h = cache.load (key, DAY_MS);
+            var h = net ? null : cache.load (key, DAY_MS);
             if (h != null && h.get_node_type () == Json.NodeType.OBJECT) return h.get_object ();
             var p = yield api.person (id);
             cache.save (key, obj_node (p));
             return p;
+        }
+
+        /**
+         * Сводка задач для ссылок #N: номер → «C|Трекер: тема (Статус)» у закрытой, «O|…» у открытой. По задаче — в
+         * кэше на час, остальные одним запросом; закрытость — по статусу и справочнику статусов. Недоступных нет в ответе.
+         */
+        public async HashTable<int, string> issue_briefs (int[] ids) {
+            var res = new HashTable<int, string> (direct_hash, direct_equal);
+            int[] ask = {};
+            foreach (var id in ids) {
+                var h = cache.load ("brief-%d".printf (id), HOUR_MS);
+                if (h != null && h.get_node_type () == Json.NodeType.OBJECT && jstr (h.get_object (), "b") != "") res[id] = jstr (h.get_object (), "b");
+                else ask += id;
+            }
+            if (ask.length == 0) return res;
+            try {
+                var closed_st = new GenericSet<string> (str_hash, str_equal);
+                foreach (var st in yield statuses ()) if (jbool (st, "is_closed")) closed_st.add (jint (st, "id").to_string ());
+                int[] miss;
+                foreach (var i in yield api.issues_by_ids (ask, out miss)) {
+                    bool c = i.status_closed || closed_st.contains (i.status.id.to_string ());
+                    var b = "%s|%s: %s (%s)".printf (c ? "C" : "O", i.tracker.name, i.subject, i.status.name);
+                    var o = new Json.Object ();
+                    o.set_string_member ("b", b);
+                    cache.save ("brief-%d".printf (i.id), obj_node (o));
+                    res[i.id] = b;
+                }
+            } catch (Error e) {}
+            return res;
         }
 
         /** login → человек (id, имя); null — такого нет или поиск людей закрыт. Отказы помним 10 минут. */

@@ -1,26 +1,79 @@
 /* Textile → виджеты: подряд идущий текст (абзацы, списки, код, цитаты, линии) — один FlowView, таблицы/картинки/collapse — свои. */
 namespace Redmine {
 
-    /** login → «id|Имя» на всё приложение: упоминания резолвятся один раз (RefData хранит и на диске). */
+    /** login и «user#id» → «id|Имя» на всё приложение: упоминания резолвятся один раз (RefData хранит и на диске). */
     private HashTable<string, string>? mention_cache = null;
+    /** id → имя, как его пишет сервер (author/journals/watchers.name): упоминание — тем же именем, что и авторы. */
+    private HashTable<string, string>? known_names = null;
+    /** Номер задачи → «C|O» + подсказка: с сервера (issue_briefs) и, главнее, — открытые в приложении задачи. */
+    private HashTable<string, string>? brief_cache = null;
+    private HashTable<string, string>? brief_known = null;
+    /** Стили ячеек «{background:…}»: правило → класс, все правила — в одном провайдере. */
+    private Gtk.CssProvider? cell_css = null;
+    private HashTable<string, string>? cell_classes = null;
+    private StringBuilder? cell_rules = null;
 
     public class RichText : Gtk.Box {
         private string text;
         private GenericArray<Json.Object> atts;
         private int quote_depth = 0;
-        /** Ссылка #note-N на комментарий этой же задачи. */
+        /** Ссылка #note-K на комментарий этой же задачи: K — порядковый номер записи журнала. */
         public signal void note_activated (int note);
 
         public RichText (string text, GenericArray<Json.Object>? attachments = null) {
             Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
             this.text = text;
             atts = attachments ?? new GenericArray<Json.Object> ();
-            if (mention_cache == null) mention_cache = new HashTable<string, string> (str_hash, str_equal);
+            init_caches ();
             render ();
             resolve_mentions.begin ();
         }
 
-        private string? lookup (string login) { return mention_cache[login]; }
+        private static void init_caches () {
+            if (mention_cache != null) return;
+            mention_cache = new HashTable<string, string> (str_hash, str_equal);
+            known_names = new HashTable<string, string> (str_hash, str_equal);
+            brief_cache = new HashTable<string, string> (str_hash, str_equal);
+            brief_known = new HashTable<string, string> (str_hash, str_equal);
+        }
+
+        /** Имена людей задачи в формате сервера и её статус — до того, как строятся её тексты. */
+        public static void learn (Issue i) {
+            init_caches ();
+            Named?[] people = { i.author, i.assigned_to };
+            foreach (var n in people) if (n != null && n.id > 0 && n.name != "") known_names[n.id.to_string ()] = n.name;
+            var list = i.watchers;
+            foreach (var j in i.journals) list.add (jobj (j, "user"));
+            foreach (var o in list) if (o != null && jint (o, "id") > 0 && jstr (o, "name") != "") known_names[jint (o, "id").to_string ()] = jstr (o, "name");
+            brief_known[i.id.to_string ()] = "%s|%s: %s (%s)".printf (i.status_closed ? "C" : "O", i.tracker.name, i.subject, i.status.name);
+        }
+
+        /**
+         * Имя как у сервера: это же id уже встречалось в задаче — оттуда; иначе «Фамилия Имя», как пишет
+         * my.basealt.space (user_format lastname_firstname). ponytail: формат других серверов не угадываем.
+         */
+        private static string server_name (int id, Json.Object p) {
+            var known = known_names[id.to_string ()];
+            if (known != null) return known;
+            var first = jstr (p, "firstname");
+            if (first == "") first = jstr (p, "first_name");
+            var last = jstr (p, "lastname");
+            if (last == "") last = jstr (p, "last_name");
+            return (last + " " + first).strip ();
+        }
+
+        private string? lookup (string key) {
+            if (key.has_prefix ("issue#")) {
+                var id = key.substring (6);
+                return brief_known[id] ?? brief_cache[id];
+            }
+            var hit = mention_cache[key];
+            if (hit == null) return null;
+            // имя могло стать известным позже (открыли задачу, где человек — автор)
+            var bar = hit.index_of ("|");
+            var known = known_names[hit.substring (0, bar)];
+            return known != null ? hit.substring (0, bar + 1) + known : hit;
+        }
 
         private async void resolve_mentions () {
             var s = App.get ().session;
@@ -28,11 +81,34 @@ namespace Redmine {
             bool changed = false;
             foreach (var l in Textile.mention_logins (text)) {
                 if (mention_cache.contains (l)) continue;
-                var p = yield s.refs.person_by_login (l);
-                if (p == null) continue;
-                var n = person_short_name (p);
+                Json.Object? p = null;
+                if (l.has_prefix ("user#")) {
+                    var id = int.parse (l.substring (5));
+                    if (known_names.contains (id.to_string ())) {
+                        mention_cache[l] = "%d|%s".printf (id, known_names[id.to_string ()]);
+                        changed = true;
+                        continue;
+                    }
+                    try { p = yield s.refs.person (id); } catch (Error e) {}
+                } else {
+                    p = yield s.refs.person_by_login (l);
+                }
+                if (p == null || jint (p, "id") <= 0) continue;
+                var n = server_name (jint (p, "id"), p);
                 mention_cache[l] = "%d|%s".printf (jint (p, "id"), n != "" ? n : l);
                 changed = true;
+            }
+            var ids = Textile.issue_ids (text);
+            if (ids.length > 0) {
+                var briefs = yield s.refs.issue_briefs (ids);
+                foreach (var id in ids) {
+                    var b = briefs[id];
+                    var k = id.to_string ();
+                    if (b != null && brief_cache[k] != b) {
+                        brief_cache[k] = b;
+                        if (!brief_known.contains (k)) changed = true;
+                    }
+                }
             }
             if (changed) render ();
         }
@@ -104,6 +180,7 @@ namespace Redmine {
             }
         }
 
+        /** Сетка как у сайта: рамка у каждой ячейки, th — жирный по центру на сером; ширина по содержимому. */
         private Gtk.Widget table (Textile.Block b) {
             var grid = new Gtk.Grid () { column_spacing = 0, row_spacing = 0 };
             grid.add_css_class ("rich-table");
@@ -112,18 +189,74 @@ namespace Redmine {
             foreach (var l in b.lines) {
                 foreach (var c in l.cells) {
                     var m = Textile.inline_markup (c.text, lookup);
-                    var cell = label (c.header ? "<b>" + m + "</b>" : m);
-                    cell.selectable = false;
-                    cell.hexpand = false;
-                    cell.xalign = c.xalign;
-                    cell.max_width_chars = 40;
-                    // без минимальной ширины прокрутка меряет высоту по ширине в букву — таблица вытягивается вниз пустотой
-                    cell.width_chars = int.min (c.text.char_count (), 40);
+                    var just = c.xalign == 0.5f ? Gtk.Justification.CENTER : (c.xalign == 1 ? Gtk.Justification.RIGHT : Gtk.Justification.LEFT);
+                    Gtk.Widget cell;
+                    if (m.contains ("class=\"mention\"")) {
+                        // упоминание — пилюля-виджет, а в GtkLabel виджет не вставить: ячейка-FlowView
+                        var fv = new FlowView () { hexpand = false, justification = just };
+                        fv.link_activated.connect (on_link);
+                        fv.add_cell (m);
+                        cell = fv;
+                    } else {
+                        // пустая ячейка — пробелом: строка «|  |  |» держит высоту строки, как на сайте
+                        var lb = label (m != "" ? m : " ");
+                        lb.selectable = false;
+                        lb.hexpand = false;
+                        lb.xalign = c.xalign;
+                        lb.justify = just;
+                        lb.max_width_chars = 40;
+                        // без минимальной ширины прокрутка меряет высоту по ширине в букву — таблица вытягивается вниз пустотой
+                        lb.width_chars = int.min (c.text.char_count (), 40);
+                        cell = lb;
+                    }
+                    if (c.header) cell.add_css_class ("rich-th");
+                    var cls = cell_class (c);
+                    if (cls != null) cell.add_css_class (cls);
                     grid.attach (cell, c.col, r, c.span, c.rowspan);
                 }
                 r++;
             }
-            return new Gtk.ScrolledWindow () { child = grid, vscrollbar_policy = Gtk.PolicyType.NEVER, propagate_natural_height = true };
+            // не шире содержимого; не влезает — прокрутка вбок, рамка целиком внутри прокрутки
+            return new Gtk.ScrolledWindow () {
+                child = grid, vscrollbar_policy = Gtk.PolicyType.NEVER, propagate_natural_height = true,
+                propagate_natural_width = true, halign = Gtk.Align.START,
+            };
+        }
+
+        /**
+         * Класс со стилем ячейки «{background:#ffc; color:red; font-weight:bold}». Цвета уже проверены разбором,
+         * сюда идут пересобранными через Gdk.RGBA. Явный фон без своего цвета текста — с контрастным текстом:
+         * светлый фон в тёмной теме иначе получил бы белые буквы.
+         */
+        private static string? cell_class (Textile.Cell c) {
+            var sb = new StringBuilder ();
+            Gdk.RGBA bg = {}, fg = {};
+            bool has_fg = c.fg != null && fg.parse (c.fg);
+            if (c.bg != null && bg.parse (c.bg) && bg.alpha > 0) {
+                sb.append ("background-color:%s;".printf (bg.to_string ()));
+                if (!has_fg) {
+                    var lum = 0.2126 * bg.red + 0.7152 * bg.green + 0.0722 * bg.blue;
+                    sb.append (lum > 0.5 ? "color:rgba(0,0,6,0.8);" : "color:#ffffff;");
+                }
+            }
+            if (has_fg) sb.append ("color:%s;".printf (fg.to_string ()));
+            if (c.bold) sb.append ("font-weight:bold;");
+            if (sb.len == 0) return null;
+            if (cell_css == null) {
+                cell_css = new Gtk.CssProvider ();
+                cell_classes = new HashTable<string, string> (str_hash, str_equal);
+                cell_rules = new StringBuilder ();
+                Gtk.StyleContext.add_provider_for_display (Gdk.Display.get_default (), cell_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+            }
+            var cls = cell_classes[sb.str];
+            if (cls != null) return cls;
+            // ponytail: не больше 256 разных стилей на приложение — дальше ячейки без стиля
+            if (cell_classes.size () >= 256) return null;
+            cls = "rich-cell-%u".printf (cell_classes.size ());
+            cell_classes[sb.str] = cls;
+            cell_rules.append (".rich-table > .%s{%s}\n".printf (cls, sb.str));
+            cell_css.load_from_string (cell_rules.str);
+            return cls;
         }
 
         private bool external_image (string ref_name) {
@@ -150,9 +283,10 @@ namespace Redmine {
 
         private void on_link (string uri) {
             var w = win_of (this);
+            // «#N#note-K» и «#note-K» — K это порядковый номер записи журнала, как на сайте
             if (uri.has_prefix ("issue:")) {
                 var p = uri.substring (6).split (":");
-                if (w != null) w.open_issue (int.parse (p[0]), p.length > 1 ? int.parse (p[1]) : 0, true);
+                if (w != null) w.open_link (new ServerLink () { kind = LinkKind.ISSUE, id = int.parse (p[0]), note_index = p.length > 1 ? int.parse (p[1]) : 0 }, true);
                 return;
             }
             if (uri.has_prefix ("note:")) {
@@ -167,15 +301,28 @@ namespace Redmine {
             var target = uri;
             // ссылка от корня сервера («/people/107»)
             if (uri.has_prefix ("/") && s != null) target = s.server + uri;
-            // своя задача по полному адресу — открываем в приложении
-            MatchInfo? mi = null;
-            if (s != null && target.has_prefix (s.server) && /\/issues\/(\d+)(?:#note-(\d+))?$/.match (target, 0, out mi)) {
-                if (w != null) w.open_issue (int.parse (mi.fetch (1)), mi.get_match_count () > 2 ? int.parse (mi.fetch (2)) : 0, true);
+            // своя задача, проект, человек по полному адресу — в приложении
+            var sl = s != null ? ServerLink.parse (s.server, target) : null;
+            if (sl != null && w != null) {
+                w.open_link (sl, true);
                 return;
             }
             new Gtk.UriLauncher (target).launch.begin (w, null);
         }
     }
+    /** Пилюля упоминания: аватар 18 px и имя; кнопка — Tab/Enter, курсор-указатель, подпись для диктора. */
+    public delegate void PillClick ();
+    public Gtk.Widget mention_pill (int id, string name, owned PillClick click) {
+        var box = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 4);
+        box.append (Avatars.make (id, name, 18));
+        box.append (new Gtk.Label (name));
+        var b = new Gtk.Button () { child = box, cursor = new Gdk.Cursor.from_name ("pointer", null), valign = Gtk.Align.BASELINE_CENTER };
+        b.add_css_class ("mention-pill");
+        b.update_property (Gtk.AccessibleProperty.LABEL, name, -1);
+        b.clicked.connect (() => click ());
+        return b;
+    }
+
     /**
      * Подряд идущие текстовые блоки одного Textile — один GtkTextView без своей прокрутки: выделение мышью и
      * клавиатурой, Ctrl+C и «Выделить всё» идут через все абзацы. Стили — общие теги, ссылки — смещения в буфере,
@@ -187,7 +334,7 @@ namespace Redmine {
         private static Gtk.TextTagTable? shared = null;
 
         private class Deco { public int kind; public int first; public int last; public int x; public int above; }
-        private class Link { public int start; public int end; public string href; }
+        private class Link { public int start; public int end; public string href; public string? title; }
         private GenericArray<Deco> decos = new GenericArray<Deco> ();
         private GenericArray<Link> links = new GenericArray<Link> ();
         private bool in_dim;
@@ -244,6 +391,15 @@ namespace Redmine {
                 return h != null;
             });
             add_controller (key);
+            // подсказка ссылки на задачу («Трекер: тема (Статус)»), как title на сайте; только мышью
+            has_tooltip = true;
+            query_tooltip.connect ((x, y, kb, tip) => {
+                if (kb) return false;
+                var l = link_at (x, y);
+                if (l == null || l.title == null) return false;
+                tip.set_text (l.title);
+                return true;
+            });
             var focus = new Gtk.EventControllerFocus ();
             focus.enter.connect (() => cursor_visible = true);
             focus.leave.connect (() => cursor_visible = false);
@@ -270,6 +426,8 @@ namespace Redmine {
             shared.add (new Gtk.TextTag ("dim"));
             shared.add (new Gtk.TextTag ("macro") { scale = 0.833 });
             shared.add (new Gtk.TextTag ("link") { underline = Pango.Underline.SINGLE });
+            // ссылка на закрытую задачу — серая и зачёркнутая, поверх цвета ссылки
+            shared.add (new Gtk.TextTag ("closed") { strikethrough = true });
             var sm = Adw.StyleManager.get_default ();
             sm.notify["dark"].connect (paint);
             sm.notify["high-contrast"].connect (paint);
@@ -288,6 +446,7 @@ namespace Redmine {
             macro.alpha *= 0.6f;
             shared.lookup ("dim").foreground_rgba = dim;
             shared.lookup ("macro").foreground_rgba = macro;
+            shared.lookup ("closed").foreground_rgba = dim;
             shared.lookup ("link").foreground_rgba = sm.get_accent_color ().to_standalone_rgba (sm.dark);
         }
 
@@ -334,22 +493,56 @@ namespace Redmine {
             return it.get_line ();
         }
 
-        private void put (string text, string[] tags, string? href = null) {
+        private void put (string text, string[] tags, string? href = null, string? title = null) {
             if (text == "") return;
+            if ("mention" in tags && href != null) { put_mention (text, href); return; }
             int s = end_offset ();
             Gtk.TextIter e;
             buffer.get_end_iter (out e);
             buffer.insert (ref e, text, -1);
             int z = end_offset ();
             foreach (var t in tags) tag_range (shared.lookup (t), s, z);
-            if (href != null) links.add (new Link () { start = s, end = z, href = href });
+            if (href != null) links.add (new Link () { start = s, end = z, href = href, title = title });
+        }
+
+        /**
+         * @упоминание — пилюлей с аватаром, как на телефоне. Имя — в данных якоря: его берёт copy_clipboard.
+         */
+        private void put_mention (string name, string href) {
+            Gtk.TextIter e;
+            buffer.get_end_iter (out e);
+            var anchor = new Gtk.TextChildAnchor ();
+            anchor.set_data<string> ("name", name);
+            buffer.insert_child_anchor (e, anchor);
+            add_child_at_anchor (mention_pill (int.parse (href.substring (5)), name, () => link_activated (href)), anchor);
+            // пробел нулевой ширины: строка из одной пилюли иначе без высоты шрифта под базовой линией — низ обрезан
+            buffer.get_end_iter (out e);
+            buffer.insert (ref e, "\u200B", -1);
+        }
+
+        /** Ячейка таблицы с упоминанием: текст и ширина по содержимому (TextView сам ширину не просит). */
+        public void add_cell (string markup) {
+            put_markup (markup);
+            int anchors = 0;
+            var sb = new StringBuilder ();
+            Gtk.TextIter it;
+            buffer.get_start_iter (out it);
+            for (; !it.is_end (); it.forward_char ()) {
+                var anc = it.get_child_anchor ();
+                if (anc != null) { anchors++; sb.append (anc.get_data<string> ("name") ?? ""); }
+                else sb.append_unichar (it.get_char ());
+            }
+            int w, h;
+            create_pango_layout (sb.str).get_pixel_size (out w, out h);
+            // аватар 18 + промежуток и поля пилюли — на каждое упоминание
+            width_request = int.min (w + anchors * 30 + 2, 360);
         }
 
         private void put_markup (string markup, string[] extra = {}) {
             foreach (var r in Textile.markup_runs (markup)) {
                 var t = r.tags;
                 foreach (var x in extra) t += x;
-                put (r.text, t, r.href);
+                put (r.text, t, r.href, r.title);
             }
         }
 
@@ -378,7 +571,8 @@ namespace Redmine {
                         var l = b.lines[i];
                         int s = begin ();
                         put (l.number > 0 ? "%d.\t".printf (l.number) : "•\t", { "dim" });
-                        put_markup (Textile.inline_markup (l.text, lookup));
+                        // перенос внутри пункта — U+2028: та же строка буфера, висячий отступ не сбивается
+                        put_markup (Textile.inline_markup (l.text.replace ("\n", "\u2028"), lookup));
                         int m = left + 4 + l.level * 18;
                         // висячий отступ: маркер с края, перенос строки — под текстом; табуляция ровняет «•» и «10.»
                         var t = para_tag ("li%d".printf (m), m, -1, -MARK, -1, -1);
@@ -437,18 +631,35 @@ namespace Redmine {
             }
         }
 
+        /** Ctrl+C и «Копировать»: пилюли упоминаний — их именами, а не U+FFFC. */
+        public override void copy_clipboard () {
+            Gtk.TextIter a, z;
+            if (!buffer.get_selection_bounds (out a, out z)) return;
+            var sb = new StringBuilder ();
+            for (var it = a; it.compare (z) < 0; it.forward_char ()) {
+                var anc = it.get_child_anchor ();
+                if (anc != null) sb.append (anc.get_data<string> ("name") ?? "");
+                else if (it.get_char () != 0x200B) sb.append_unichar (it.get_char ());
+            }
+            get_clipboard ().set_text (sb.str);
+        }
+
         private string? href_of (int offset) {
             foreach (var l in links) if (offset >= l.start && offset < l.end) return l.href;
             return null;
         }
 
-        private string? href_at (double x, double y) {
+        private Link? link_at (double x, double y) {
             int bx, by;
             window_to_buffer_coords (Gtk.TextWindowType.WIDGET, (int) x, (int) y, out bx, out by);
             Gtk.TextIter it;
             if (!get_iter_at_location (out it, bx, by)) return null;
-            return href_of (it.get_offset ());
+            int o = it.get_offset ();
+            foreach (var l in links) if (o >= l.start && o < l.end) return l;
+            return null;
         }
+
+        private string? href_at (double x, double y) { return link_at (x, y)?.href; }
 
         public override void snapshot_layer (Gtk.TextViewLayer layer, Gtk.Snapshot snap) {
             if (layer != Gtk.TextViewLayer.BELOW_TEXT || decos.length == 0) return;

@@ -177,11 +177,11 @@ namespace Redmine {
             inner.show_content = true;
         }
 
-        /** Ссылка своего сервера, пришедшая снаружи (App.open_uri). */
-        public void open_link (ServerLink l) {
+        /** Ссылка своего сервера: пришедшая снаружи (App.open_uri) или из текста задачи (from_issue). */
+        public void open_link (ServerLink l, bool from_issue = false) {
             switch (l.kind) {
                 case LinkKind.ISSUE:
-                    open_issue (l.id, l.journal_id);
+                    open_issue (l.id, l.journal_id, from_issue);
                     if (l.note_index > 0) (issue_nav.visible_page as IssuePage)?.reveal_note_index (l.note_index);
                     break;
                 case LinkKind.USER:

@@ -42,23 +42,42 @@ namespace Redmine {
             return np;
         }
 
+        /**
+         * Как на Android: сохранённое (любого возраста) — сразу, без спиннера; старше суток или нет — фоном
+         * с сервера, поля тихо перерисовываются. Сеть упала — остаётся сохранённое.
+         */
         private async void load (int id, Adw.NavigationPage np, Adw.PreferencesPage pp, Adw.Avatar av, Gtk.Label name_l, Gtk.Label sub, Adw.Spinner spinner) {
             var s = App.get ().session;
             if (s == null) return;
-            Json.Object p;
+            bool fresh_p, fresh_u;
+            var p = s.refs.cached ("person-%d".printf (id), out fresh_p);
+            var u = s.refs.cached ("user-%d".printf (id), out fresh_u);
+            Adw.PreferencesGroup[] shown = {};
+            if (p != null) {
+                spinner.visible = false;
+                shown = fill (id, p, u, np, pp, av, name_l, sub);
+                debug ("person %d: from cache (fresh %s)", id, (fresh_p && u != null && fresh_u).to_string ());
+            }
+            if (p != null && fresh_p && u != null && fresh_u) return;
+            Json.Object? np_ = null;
             try {
-                p = yield s.refs.person (id);
+                np_ = yield s.refs.person (id, true);
             } catch (Error e) {
+                if (p != null) return;
                 spinner.visible = false;
                 sub.label = e.message;
                 sub.visible = true;
                 sub.add_css_class ("error");
                 return;
             }
-            Json.Object? u = null;
-            try { u = yield s.api.user (id); } catch (Error e) { debug ("users/%d: %s", id, e.message); }
+            try { u = yield s.refs.user (id, true); } catch (Error e) { debug ("users/%d: %s", id, e.message); }
             spinner.visible = false;
+            foreach (var g in shown) pp.remove (g);
+            fill (id, np_, u, np, pp, av, name_l, sub);
+        }
 
+        private Adw.PreferencesGroup[] fill (int id, Json.Object p, Json.Object? u, Adw.NavigationPage np, Adw.PreferencesPage pp, Adw.Avatar av, Gtk.Label name_l, Gtk.Label sub) {
+            var s = App.get ().session;
             string[] parts = {};
             foreach (var k in new string[] { "firstname", "middlename", "lastname" }) if (jstr (p, k) != "") parts += jstr (p, k);
             var full = parts.length > 0 ? string.joinv (" ", parts) : person_short_name (p);
@@ -76,7 +95,11 @@ namespace Redmine {
                 m.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
                 m.activated.connect (() => nav.push (page (mid, m.subtitle != "…" ? m.subtitle : "")));
                 work.add (m);
-                s.refs.person.begin (mid, (o, r) => {
+                // руководитель — тоже из сохранённого, без сети, если есть
+                bool mf;
+                var mp = s.refs.cached ("person-%d".printf (mid), out mf);
+                if (mp != null) { m.subtitle = person_short_name (mp); mav.text = m.subtitle; }
+                if (mp == null || !mf) s.refs.person.begin (mid, false, (o, r) => {
                     try {
                         var mn = person_short_name (s.refs.person.end (r));
                         m.subtitle = mn;
@@ -121,6 +144,7 @@ namespace Redmine {
             open.activated.connect (() => new Gtk.UriLauncher (s.server + "/people/%d".printf (id)).launch.begin (get_root () as Gtk.Window, null));
             links.add (open);
             foreach (var g in new Adw.PreferencesGroup[] { work, contacts, acc, about }) g.visible = g.get_row (0) != null;
+            return { work, contacts, acc, about, links };
         }
 
         private Adw.PreferencesGroup group (Adw.PreferencesPage pp, string? t) {

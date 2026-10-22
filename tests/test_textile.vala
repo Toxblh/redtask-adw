@@ -67,7 +67,8 @@ void test_inline () {
     assert (inline_markup ("a < b & c") == "a &lt; b &amp; c");
     // упоминание с известным логином — ссылка на человека
     string? look (string l) { return l == "ivanov" ? "42|Иван Иванов" : null; }
-    assert (inline_markup ("привет @ivanov.", look) == "привет <a href=\"user:42\">@Иван Иванов</a>.");
+    // как на сайте: именем без «@»
+    assert (inline_markup ("привет @ivanov.", look) == "привет <a href=\"user:42\" class=\"mention\">Иван Иванов</a>.");
     assert (inline_markup ("@petrov", look) == "@petrov");
     // сущности инертны: &gt; не цитата
     var l = parse ("&gt; не цитата");
@@ -122,10 +123,42 @@ void test_flow () {
     foreach (var x in r) if (x.text == "код") assert (x.tags.length == 1 && x.tags[0] == "code");
     var h = markup_runs (text_markup (parse ("h1. Big\nh4. small\n{{hello}}")));
     assert (h[0].text == "Big" && h[0].tags[0] == "h1");
-    assert (h[2].text == "small" && h[2].tags[0] == "h3");
-    assert (h[4].text == "hello" && h[4].tags[0] == "macro");
+    // строка под заголовком — его продолжение (RedCloth: «h2. X<br />…»)
+    assert (h[2].text == "small\n" && h[2].tags[0] == "h3");
+    assert (h[3].text == "hello" && "macro" in h[3].tags && "h3" in h[3].tags);
     var u = markup_runs (inline_markup ("#5 и @Ivan", (l) => l == "ivan" ? "7|Иван" : null));
-    assert (u[0].href == "issue:5" && u[2].href == "user:7" && u[2].text == "@Иван");
+    assert (u[0].href == "issue:5" && u[2].href == "user:7" && u[2].text == "Иван");
+    // закрытая задача — серая и зачёркнутая, подсказка «Трекер: тема (Статус)» — title ссылки
+    var c = markup_runs (inline_markup ("#5#note-2 и #6 и user#7", (k) => k == "issue#5" ? "C|Ошибка: <x> (Закрыта)" : (k == "issue#6" ? "O|Задача: y (Новая)" : (k == "user#7" ? "7|Пальгунов Антон" : null))));
+    assert (c[0].href == "issue:5:2" && "closed" in c[0].tags && c[0].title == "Ошибка: <x> (Закрыта)");
+    assert (c[2].href == "issue:6" && !("closed" in c[2].tags) && c[2].title == "Задача: y (Новая)");
+    assert (c[4].href == "user:7" && c[4].text == "Пальгунов Антон" && c[4].tags[0] == "mention");
+    var ids = issue_ids ("#5, #5#note-2, #note-3, @#6@ и #7");
+    assert (ids.length == 3 && ids[0] == 5 && ids[2] == 7);
+}
+
+/* Ячейки таблиц: стиль «{…}.» (только безопасные значения), th по центру, пустые строки. */
+void test_cells () {
+    var c = parse_cells ("|{background:#ffc}. стиль |{color:red; font-weight:bold}. x |{background:url(javascript:x); color:expression(1)}. y |");
+    assert (c[0].bg == "#ffc" && c[0].fg == null && c[0].text == "стиль");
+    assert (c[1].fg == "red" && c[1].bold && c[1].bg == null);
+    assert (c[2].bg == null && c[2].fg == null && c[2].text == "y");
+    var a = parse_cells ("|{text-align:right;background-color:rgb(1, 2, 3)}. r |_. h |_<. hl |{font-weight:700}. b |");
+    assert (a[0].xalign == 1 && a[0].bg == "rgb(1, 2, 3)");
+    assert (a[1].header && a[1].xalign == 0.5f && a[2].header && a[2].xalign == 0);
+    assert (a[3].bold);
+    // модификатор после пробела — текст, как у сервера
+    var t = parse_cells ("| {color:red}. x |");
+    assert (t[0].text == "{color:red}. x" && t[0].fg == null);
+    // пустая строка таблицы: ячейки есть, текст пустой — высоту держит рендер
+    var e = parse ("|_. A |_. B |
+|  |  |");
+    assert (e[1].kind == Kind.ROW && e[1].cells.length == 2 && e[1].cells[0].text == "" && e[1].cells[1].text == "");
+    // строка под пунктом списка — продолжение пункта, «h2.» там не заголовок
+    var li = parse ("* Тест
+h2. X
+Y");
+    assert (li.length == 1 && li[0].kind == Kind.ITEM && li[0].text == "Тест\nh2. X\nY");
 }
 
 int main (string[] args) {
@@ -133,6 +166,7 @@ int main (string[] args) {
     Test.add_func ("/textile/blocks", test_blocks);
     Test.add_func ("/textile/quotes", test_quotes);
     Test.add_func ("/textile/inline", test_inline);
+    Test.add_func ("/textile/cells", test_cells);
     Test.add_func ("/textile/mentions", test_mentions);
     Test.add_func ("/textile/preview", test_preview);
     Test.add_func ("/textile/flow", test_flow);

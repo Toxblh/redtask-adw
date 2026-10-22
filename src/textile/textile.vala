@@ -21,7 +21,7 @@ namespace Textile {
     private Regex? _sup; private Regex? _sub; private Regex? _code; private Regex? _macro; private Regex? _img;
     private Regex? _hr; private Regex? _heading; private Regex? _list; private Regex? _bq; private Regex? _collapse;
     private Regex? _toc; private Regex? _entity; private Regex? _preopen; private Regex? _codetag; private Regex? _cellmod;
-    private Regex? _cellspan; private Regex? _rowspan; private Regex? _email; private Regex? _fnref; private Regex? _fn;
+    private Regex? _cellspan; private Regex? _rowspan; private Regex? _email; private Regex? _fnref; private Regex? _fn; private Regex? _color;
 
     private Regex re (string p, RegexCompileFlags f = 0) {
         try {
@@ -71,6 +71,7 @@ namespace Textile {
         _codetag = re ("</?code(?:\\s[^<>]*)?>");
         _cellmod = re ("""^((?:_|\\\d+|/\d+|[<>=^~]|\{[^}]*\}){1,8})\.\s*(.*)""", RegexCompileFlags.DOTALL);
         _cellspan = re ("""\\(\d+)""");
+        _color = re ("""^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|[a-z]{3,20}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$""");
         _rowspan = re ("""/(\d+)""");
     }
 
@@ -167,7 +168,41 @@ namespace Textile {
         public float xalign = 0;
         /** Колонка в сетке с учётом colspan/rowspan выше — ставит layout_table (). */
         public int col = 0;
-        public Cell (string text, bool header = false, int span = 1) { this.text = text; this.header = header; this.span = span; }
+        /** Из «{…}.»: цвет фона и текста (#rgb, #rrggbb, имя, rgb()) и жирность; прочее не берём. */
+        public string? bg = null;
+        public string? fg = null;
+        public bool bold = false;
+        public Cell (string text, bool header = false, int span = 1) {
+            this.text = text; this.header = header; this.span = span;
+            if (header) xalign = 0.5f; // th — по центру, как в браузере
+        }
+
+        /** «background:#ffc; color:red; text-align:right; font-weight:bold». */
+        public void apply_style (string style) {
+            foreach (var decl in style.split (";")) {
+                var kv = decl.split (":", 2);
+                if (kv.length < 2) continue;
+                var k = kv[0].strip ().down ();
+                var v = kv[1].strip ().down ();
+                switch (k) {
+                    case "background":
+                    case "background-color":
+                        if (_color.match (v)) bg = v;
+                        break;
+                    case "color":
+                        if (_color.match (v)) fg = v;
+                        break;
+                    case "text-align":
+                        if (v == "left") xalign = 0;
+                        else if (v == "center") xalign = 0.5f;
+                        else if (v == "right") xalign = 1;
+                        break;
+                    case "font-weight":
+                        bold = v == "bold" || v == "bolder" || (v.length == 3 && v[0] >= '6' && v[0] <= '9' && v.has_suffix ("00"));
+                        break;
+                }
+            }
+        }
     }
 
     /** Колонки ячеек: ячейка с /N. занимает свою колонку ещё N-1 строк ниже, их ячейки сдвигаются вправо. */
@@ -219,9 +254,12 @@ namespace Textile {
             // «{…}» вырезаем, чтобы «>» и «<» внутри стиля не сошли за выравнивание
             var m = Regex.split_simple ("\\{[^}]*\\}", mods);
             var bare = string.joinv ("", m);
+            // куски вне «{…}» — «_», «<», «\\2» — без «:», apply_style их пропустит
+            foreach (var st in Regex.split_simple ("\\{([^}]*)\\}", mods)) c.apply_style (st);
             if (bare.contains ("<>")) c.xalign = 0;
             else if (bare.contains ("=")) c.xalign = 0.5f;
             else if (bare.contains (">")) c.xalign = 1;
+            else if (bare.contains ("<")) c.xalign = 0;
             res.add (c);
         }
         return res;
@@ -302,7 +340,16 @@ namespace Textile {
             var line = decode_entities (raw);
             MatchInfo mi;
             if (!_img.match (line, 0, out mi)) {
-                res.add (block (line));
+                var b = block (line);
+                // как RedCloth: «h2.» не с начала абзаца — не заголовок; строка под пунктом или заголовком — его
+                // продолжение с переносом («* Тест\nh2. X» — пункт в две строки, «h2. X\n@кто» — заголовок в две)
+                var last = res.length > 0 ? res[res.length - 1] : null;
+                if (last != null && (b.kind == Kind.PLAIN || (b.kind == Kind.HEADING && last.kind == Kind.ITEM))
+                    && (last.kind == Kind.ITEM || last.kind == Kind.HEADING)) {
+                    last.text += "\n" + line.strip ();
+                    return;
+                }
+                res.add (b);
                 return;
             }
             string stripped;
@@ -514,6 +561,7 @@ namespace Textile {
         public string text;
         public string[] tags;
         public string? href;
+        public string? title = null; // подсказка ссылки: «Трекер: тема (Статус)» у задачи
         public Run (string text, string[] tags, string? href) { this.text = text; this.tags = tags; this.href = href; }
     }
 
@@ -535,45 +583,67 @@ namespace Textile {
         public GenericArray<Run> runs = new GenericArray<Run> ();
         private string[] stack = {};
         private string?[] hrefs = {};
+        private string?[] titles = {};
 
         public void start (MarkupParseContext c, string name, string[] keys, string[] vals) throws MarkupError {
             string tag = name;
-            string? href = null;
+            string? href = null, title = null;
             for (int i = 0; i < keys.length; i++) {
                 if (keys[i] == "href") href = vals[i];
+                if (keys[i] == "title") title = vals[i];
                 if (keys[i] == "font_family") tag = "code";
-                else if (keys[i] == "alpha") tag = "macro";
+                else if (keys[i] == "strikethrough") tag = "closed";
+                else if (keys[i] == "alpha" && tag != "closed") tag = "macro";
                 else if (keys[i] == "size" && tag != "macro") tag = vals[i] == "x-large" ? "h1" : (vals[i] == "large" ? "h2" : "h3");
             }
-            if (name == "a") tag = "link";
+            if (name == "a") tag = "class" in keys && "mention" in vals ? "mention" : "link";
             stack += tag;
             hrefs += href;
+            titles += title;
         }
 
         public void end (MarkupParseContext c, string name) throws MarkupError {
             stack.resize (stack.length - 1);
             hrefs.resize (hrefs.length - 1);
+            titles.resize (titles.length - 1);
         }
 
         public void text (MarkupParseContext c, string t, size_t len) throws MarkupError {
             if (len == 0) return;
             string[] tags = {};
-            string? href = null;
+            string? href = null, title = null;
             // корневой <m> не тег
             for (int i = 1; i < stack.length; i++) {
                 if (!(stack[i] in tags)) tags += stack[i];
                 if (hrefs[i] != null) href = hrefs[i];
+                if (titles[i] != null) title = titles[i];
             }
-            runs.add (new Run (t.substring (0, (long) len), tags, href));
+            runs.add (new Run (t.substring (0, (long) len), tags, href) { title = title });
         }
     }
 
     // ---- инлайн → Pango markup ----
 
-    /** login (в нижнем регистре) → «id|Имя» для @упоминаний; неизвестные остаются текстом. */
-    public delegate string? MentionLookup (string login);
+    /**
+     * Справка для разметки: login (нижний регистр) и «user#id» → «id|Имя» (неизвестные остаются текстом);
+     * «issue#N» → «C|подсказка» у закрытой задачи, «O|подсказка» у открытой (подсказка «Трекер: тема (Статус)»).
+     */
+    public delegate string? MentionLookup (string key);
 
-    /** Логины из @упоминаний и user:login (нижний регистр, без повторов, не больше 20) — кого спрашивать у сервера. */
+    /** Номера задач из «#N» (без повторов, не больше 100) — у кого спросить статус; лишний номер из кода безвреден. */
+    public int[] issue_ids (string text) {
+        init ();
+        int[] res = {};
+        var seen = new GenericSet<string> (str_hash, str_equal);
+        MatchInfo? mi = null;
+        if (_issue.match (text, 0, out mi)) do {
+            var id = mi.fetch (1) ?? "";
+            if (id != "" && id.length < 10 && !seen.contains (id)) { seen.add (id); res += int.parse (id); }
+        } while (next (mi) && res.length < 100);
+        return res;
+    }
+
+    /** Логины из @упоминаний и user:login (нижний регистр), «user#id» из user#N — без повторов, не больше 20: кого спрашивать у сервера. */
     public GenericArray<string> mention_logins (string text) {
         init ();
         var res = new GenericArray<string> ();
@@ -590,7 +660,8 @@ namespace Textile {
                 if (!in_code && !seen.contains (l)) { seen.add (l); res.add (l); }
             } while (next (mi) && res.length < 20);
             if (_userref.match (line, 0, out mi)) do {
-                var l = (mi.fetch (2) ?? "").down ();
+                var id = mi.fetch (1) ?? "";
+                var l = id != "" ? "user#" + id : (mi.fetch (2) ?? "").down ();
                 if (l != "" && !seen.contains (l)) { seen.add (l); res.add (l); }
             } while (next (mi) && res.length < 20);
             if (res.length >= 20) break;
@@ -663,7 +734,7 @@ namespace Textile {
             mi.fetch_pos (0, out s, out e);
             var id = mi.fetch (1) ?? "";
             var login = mi.fetch (2) ?? "";
-            string? hit = (lookup != null && login != "") ? lookup (login.down ()) : null;
+            string? hit = lookup == null ? null : lookup (login != "" ? login.down () : "user#" + id);
             if (hit != null) {
                 var bar = hit.index_of ("|");
                 spans.add (new Span (s, e, "mention", hit.substring (bar + 1), hit.substring (0, bar)));
@@ -707,7 +778,8 @@ namespace Textile {
                 var note = mi.fetch (2) ?? "";
                 var bare = mi.fetch (3) ?? "";
                 if (bare != "") spans.add (new Span (s, e, "note", mi.fetch (0), bare));
-                else spans.add (new Span (s, e, "issue", mi.fetch (0), id + (note != "" ? ":" + note : "")));
+                else spans.add (new Span (s, e, "issue", mi.fetch (0), id + (note != "" ? ":" + note : ""),
+                    lookup != null ? (lookup ("issue#" + id) ?? "") : ""));
             }
         } while (next (mi));
         if (_macro.match (line, 0, out mi)) do {
@@ -740,7 +812,11 @@ namespace Textile {
                     sb.append ("<sup>" + esc (sp.text) + "</sup>");
                     break;
                 case "issue":
-                    sb.append ("<a href=\"issue:" + sp.payload + "\">" + esc (sp.text) + "</a>");
+                    // закрытая — серой и зачёркнутой, как «a.issue.closed» на сайте
+                    // sp.tag — ответ справки «C|…»/«O|…»; подсказка — title ссылки (GtkLabel покажет сам)
+                    var tip = sp.tag.length > 2 ? " title=\"" + Markup.escape_text (sp.tag.substring (2)) + "\"" : "";
+                    if (sp.tag.has_prefix ("C|")) sb.append ("<a href=\"issue:" + sp.payload + "\"" + tip + "><span alpha=\"55%\" strikethrough=\"true\">" + esc (sp.text) + "</span></a>");
+                    else sb.append ("<a href=\"issue:" + sp.payload + "\"" + tip + ">" + esc (sp.text) + "</a>");
                     break;
                 case "note":
                     sb.append ("<a href=\"note:" + sp.payload + "\">" + esc (sp.text) + "</a>");
@@ -749,7 +825,8 @@ namespace Textile {
                     sb.append ("<a href=\"user:" + sp.payload + "\">" + esc (sp.text) + "</a>");
                     break;
                 case "mention":
-                    sb.append ("<a href=\"user:" + sp.payload + "\">@" + esc (sp.text) + "</a>");
+                    // как сайт: имя без «@»; class — FlowView рисует пилюлей с аватаром
+                    sb.append ("<a href=\"user:" + sp.payload + "\" class=\"mention\">" + esc (sp.text) + "</a>");
                     break;
                 case "macro": // оглавление не рисуем; прочие макросы — приглушённой подписью
                     if (!sp.text.has_suffix ("toc")) sb.append ("<span size=\"small\" alpha=\"60%\">" + esc (sp.text) + "</span>");

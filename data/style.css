@@ -9,13 +9,35 @@
   border-radius: 6px;
   padding: 8px 10px;
 }
+/* Сетка, как у таблиц на сайте: рамка у каждой ячейки (верх и лево — у самой таблицы), th — жирный на сером. */
 .rich-table {
-  border: 1px solid alpha(currentColor, 0.15);
-  border-radius: 6px;
+  border-top: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
 }
-.rich-table > label {
+.rich-table > label,
+.rich-table > textview {
   padding: 4px 8px;
-  border-bottom: 1px solid alpha(currentColor, 0.08);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.rich-table > .rich-th {
+  font-weight: bold;
+  background-color: alpha(currentColor, 0.06);
+}
+/* @упоминание: аватар + имя пилюлей, цвет акцента. */
+button.mention-pill {
+  min-height: 0;
+  min-width: 0;
+  padding: 1px 7px 1px 1px;
+  border-radius: 999px;
+  /* TextView ставит низ виджета на базовую линию строки: опускаем на свой descent, чтобы имя стояло на одной линии с текстом */
+  margin-bottom: -5px;
+  background-color: alpha(var(--accent-bg-color), 0.15);
+  color: var(--accent-color);
+  font-weight: normal;
+}
+button.mention-pill:hover {
+  background-color: alpha(var(--accent-bg-color), 0.25);
 }
 .rich-image {
   border-radius: 6px;

@@ -799,7 +799,7 @@ namespace Redmine {
             var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             card.add_css_class ("card");
             var rt = new RichText (text, issue.attachments) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
-            rt.note_activated.connect ((n) => { pending_note = n; scroll_to_note (); });
+            rt.note_activated.connect ((n) => reveal_note_index (n));
             card.append (rt);
             return card;
         }
@@ -877,7 +877,7 @@ namespace Redmine {
             }
             if (notes && text != "") {
                 var rt = new RichText (text, issue.attachments);
-                rt.note_activated.connect ((n) => { pending_note = n; scroll_to_note (); });
+                rt.note_activated.connect ((n) => reveal_note_index (n));
                 inner.append (rt);
             }
             if (is_private) inner.add_css_class ("journal-private");
