@@ -11,7 +11,7 @@ app_id = 'ru.toxblh.RedmineAdw'
 pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
 localedir = get_option('prefix') / get_option('localedir')
 
-add_project_arguments('-DGETTEXT_PACKAGE="redmine-adw"', '-w', language: 'c')
+add_project_arguments('-DGETTEXT_PACKAGE="redmine-adw"', '-DG_LOG_DOMAIN="RedmineAdw"', '-w', language: 'c')
 
 conf = configuration_data()
 conf.set_quoted('APP_ID', app_id)

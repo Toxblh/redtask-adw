@@ -89,7 +89,14 @@ namespace Redmine {
     public class Resp {
         public Bytes body;
         public Soup.Message msg;
-        public string text () { return ((string) body.get_data ()).substring (0, (long) body.get_size ()); }
+        public string text () {
+            if (body.get_size () == 0) return "";
+            // данные Bytes не оканчиваются нулём — копируем ровно size байт
+            var copy = new uint8[body.get_size () + 1];
+            Memory.copy (copy, body.get_data (), body.get_size ());
+            copy[body.get_size ()] = 0;
+            return (string) copy;
+        }
     }
 
     public class Client : Object {

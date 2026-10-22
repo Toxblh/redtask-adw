@@ -17,6 +17,14 @@ namespace Redmine {
                 if (issue != null) w.open_issue (int.parse (issue));
                 return Source.REMOVE;
             });
+            // REDMINE_ADW_SHOT_ACTION=issue.edit | win.new-issue | app.preferences — открыть диалог для снимка
+            var action = Environment.get_variable ("REDMINE_ADW_SHOT_ACTION");
+            if (action != null) Timeout.add (delay * 3 / 4, () => {
+                var page = w.visible_issue ();
+                if (action.has_prefix ("issue.") && page != null) page.activate_action (action, null);
+                else w.activate_action (action, null);
+                return Source.REMOVE;
+            });
             Timeout.add (delay, () => {
                 save (w, Environment.get_variable ("REDMINE_ADW_SHOT"));
                 w.application.quit ();

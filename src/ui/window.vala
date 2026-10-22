@@ -91,6 +91,8 @@ namespace Redmine {
             if (outer.collapsed) outer.show_sidebar = false;
         }
 
+        public IssuePage? visible_issue () { return issue_nav.visible_page as IssuePage; }
+
         public Section? current_section () {
             return sections.visible_child as Section;
         }
