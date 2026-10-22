@@ -37,3 +37,19 @@
   background-color: alpha(var(--accent-color), 0.12);
   border-radius: 12px;
 }
+/* Статус: фон — тот же цвет с прозрачностью, как на Android; цвета — переменные Adwaita (тема, high contrast). */
+.status-pill {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: bold;
+  color: var(--window-fg-color);
+  background-color: alpha(currentColor, 0.12);
+}
+.status-pill.todo { color: alpha(var(--window-fg-color), 0.7); }
+.status-pill.in-progress { color: oklab(from var(--accent-blue) var(--standalone-color-oklab)); }
+.status-pill.done { color: var(--success-color); }
+.status-pill.rejected { color: var(--error-color); }
+.closed-issue,
+row.closed-issue .title {
+  text-decoration-line: line-through;
+}

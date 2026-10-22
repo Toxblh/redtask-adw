@@ -63,6 +63,17 @@ namespace Redmine {
         return due.substring (0, 10) < t.format ("%Y-%m-%d");
     }
 
+    /** До срока: «сегодня» или «5 д» (просрочено — с минусом), как dueDelta на Android; null — дата не разобралась. */
+    public string? due_delta (string? due, DateTime? today = null) {
+        if (due == null || due.length < 10) return null;
+        var d = new DateTime.from_iso8601 (due.substring (0, 10) + "T00:00:00Z", null);
+        var t = today ?? new DateTime.now_local ();
+        var t0 = new DateTime.from_iso8601 (t.format ("%Y-%m-%d") + "T00:00:00Z", null);
+        if (d == null || t0 == null) return null;
+        var days = (int) (d.difference (t0) / TimeSpan.DAY);
+        return days == 0 ? _("today") : _("%d d").printf (days);
+    }
+
     public string today_str () { return new DateTime.now_local ().format ("%Y-%m-%d"); }
 
     /** Разбор часов «1,5» / «1.5» / «1:30» → часы; не число — -1. */

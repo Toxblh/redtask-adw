@@ -6,6 +6,8 @@ namespace Redmine {
     /**
      * Список задач с фильтром Открытые/Закрытые/Все, поиском по загруженному и подгрузкой при прокрутке.
      * Кэш stale-while-revalidate по ключу «список-фильтр»: смена фильтра мгновенно подставляет его кэш.
+     * Горизонтальный свайп (палец, тачпад) листает фильтр по кругу, как на Android: список один,
+     * сдвиг показывает Gtk.Stack — старое содержимое уезжает снимком, новое въезжает с нужной стороны.
      */
     public class IssueList : Gtk.Box {
         public ListKind kind;
@@ -16,6 +18,12 @@ namespace Redmine {
         private Gtk.ListBox list;
         private StateView state;
         private Adw.Banner banner;
+        private Gtk.Stack slide;
+        private Gtk.Picture old_snap;
+        private int cur = 0;
+        private int swipe_dir = 0;
+        private double swipe_dx = 0;
+        private const string[] FILTERS = { "open", "closed", "*" };
         private Gtk.Spinner? more_spinner;
         private GenericArray<Issue> items = new GenericArray<Issue> ();
         private int total = 0;
@@ -34,7 +42,7 @@ namespace Redmine {
             filter.add (new Adw.Toggle () { name = "closed", label = _("Closed") });
             filter.add (new Adw.Toggle () { name = "*", label = _("All") });
             filter.active_name = "open";
-            filter.notify["active-name"].connect (() => reload (true));
+            filter.notify["active-name"].connect (() => { animate_switch (); reload (true); });
             append (filter);
 
             search_entry = new Gtk.SearchEntry () { placeholder_text = _("Search in this list"), hexpand = true };
@@ -67,10 +75,57 @@ namespace Redmine {
             sw.edge_reached.connect ((pos) => { if (pos == Gtk.PositionType.BOTTOM) load_more.begin (); });
             state = new StateView (sw) { vexpand = true };
             state.retry_clicked.connect (() => reload (false));
-            append (state);
+            old_snap = new Gtk.Picture () { content_fit = Gtk.ContentFit.FILL, can_shrink = true };
+            slide = new Gtk.Stack () { vexpand = true, transition_duration = 200 };
+            slide.add_child (state);
+            slide.add_child (old_snap);
+            append (slide);
+            setup_swipe ();
             Prefs.get_default ().s.changed["favorites"].connect (() => {
                 if (kind == ListKind.FAVORITES) reload (false);
             });
+        }
+
+        /** Следующий/предыдущий фильтр по кругу. */
+        private void step_filter (int dir) {
+            swipe_dir = dir; // по кругу: с «Все» вперёд на «Открытые» — всё равно влево
+            filter.active_name = FILTERS[(cur + dir + FILTERS.length) % FILTERS.length];
+            swipe_dir = 0;
+        }
+
+        /** Палец — перетаскивание, тачпад — горизонтальная прокрутка; фаза capture, события не забираем. */
+        private void setup_swipe () {
+            var drag = new Gtk.GestureDrag () { touch_only = true, propagation_phase = Gtk.PropagationPhase.CAPTURE };
+            drag.drag_end.connect ((x, y) => {
+                if (Math.fabs (x) > 80 && Math.fabs (x) > 2 * Math.fabs (y)) step_filter (x < 0 ? 1 : -1);
+            });
+            slide.add_controller (drag);
+            var scroll = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.BOTH_AXES) { propagation_phase = Gtk.PropagationPhase.CAPTURE };
+            scroll.scroll_begin.connect (() => swipe_dx = 0);
+            scroll.scroll.connect ((dx, dy) => {
+                // только тачпад: колесо мыши (в т. ч. наклон) фильтр не листает
+                if (scroll.get_unit () == Gdk.ScrollUnit.SURFACE && Math.fabs (dx) > Math.fabs (dy)) swipe_dx += dx;
+                return false;
+            });
+            scroll.scroll_end.connect (() => {
+                if (Math.fabs (swipe_dx) > 60) step_filter (swipe_dx > 0 ? 1 : -1);
+                swipe_dx = 0;
+            });
+            slide.add_controller (scroll);
+        }
+
+        /** Снимок текущего содержимого встаёт на место списка и уезжает, список въезжает с другой стороны. */
+        private void animate_switch () {
+            int i = 0;
+            while (i < FILTERS.length && FILTERS[i] != filter.active_name) i++;
+            var forward = swipe_dir != 0 ? swipe_dir > 0 : i > cur;
+            cur = i;
+            if (!slide.get_mapped () || state.get_width () == 0) return;
+            old_snap.paintable = new Gtk.WidgetPaintable (state).get_current_image ();
+            slide.transition_type = Gtk.StackTransitionType.NONE;
+            slide.visible_child = old_snap;
+            slide.transition_type = forward ? Gtk.StackTransitionType.SLIDE_LEFT : Gtk.StackTransitionType.SLIDE_RIGHT;
+            slide.visible_child = state;
         }
 
         public void start_search () {

@@ -497,7 +497,10 @@ namespace Redmine {
             var meta = new Gtk.Label ("%s · %s".printf (i.tracker.name, i.project.name)) { xalign = 0, wrap = true };
             meta.add_css_class ("dim-label");
             meta.add_css_class ("caption");
-            body.append (meta);
+            var meta_line = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+            meta_line.append (status_pill (i.status.name, i.status_closed));
+            meta_line.append (meta);
+            body.append (meta_line);
             var subj = new Gtk.Label (i.subject) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, selectable = true, margin_top = 4 };
             subj.add_css_class ("title-2");
             body.append (subj);
@@ -636,7 +639,7 @@ namespace Redmine {
                     subtitle = full != null ? Markup.escape_text (full.status.name + (assignee != null ? " · " + assignee.name : "")) : "",
                     activatable = true,
                 };
-                if (full != null && full.status_closed) r.add_css_class ("dim-label");
+                if (full != null && full.status_closed) { r.add_css_class ("dim-label"); r.add_css_class ("closed-issue"); }
                 r.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
                 r.activated.connect (() => win ()?.open_issue (id, 0, true));
                 list.append (r);
@@ -662,6 +665,7 @@ namespace Redmine {
                         + (full != null ? " · " + full.status.name : "")),
                     activatable = true,
                 };
+                if (full != null && full.status_closed) { row.add_css_class ("dim-label"); row.add_css_class ("closed-issue"); }
                 row.activated.connect (() => win ()?.open_issue (other, 0, true));
                 if (manage) {
                     var del = new Gtk.Button.from_icon_name ("user-trash-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Remove Relation") };

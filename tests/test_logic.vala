@@ -15,6 +15,25 @@ void test_dates () {
     assert (format_relative ("2023-11-14T22:13:20Z", 1700000000000 + 5 * 60000) == _("%d min").printf (5));
 }
 
+void test_status_kind () {
+    assert (status_kind ("Новая", false) == StatusKind.TODO);
+    assert (status_kind ("BACKLOG", false) == StatusKind.TODO);
+    assert (status_kind ("To Do", false) == StatusKind.TODO);
+    assert (status_kind ("В работе", false) == StatusKind.IN_PROGRESS);
+    assert (status_kind ("Заявка обработана", false) == StatusKind.IN_PROGRESS); // исключение сильнее «^заявка»
+    assert (status_kind ("Заявка подана", false) == StatusKind.TODO);
+    assert (status_kind ("Закрыта", true) == StatusKind.DONE);
+    assert (status_kind ("Новая", true) == StatusKind.DONE); // закрытость сильнее TODO
+    assert (status_kind ("ОТКЛОНЕНА", true) == StatusKind.REJECTED);
+    assert (status_kind ("Cancelled", false) == StatusKind.REJECTED);
+    assert (status_kind (" Прекращено ", true) == StatusKind.REJECTED);
+    var today = new DateTime.local (2026, 10, 22, 23, 30, 0);
+    assert (due_delta ("2026-10-22", today) == _("today"));
+    assert (due_delta ("2026-10-25", today) == _("%d d").printf (3));
+    assert (due_delta ("2026-10-20", today) == _("%d d").printf (-2));
+    assert (due_delta ("", today) == null);
+}
+
 Json.Object journal (string json) {
     return json_parse (json).get_object ();
 }
@@ -77,6 +96,7 @@ int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
     Test.add_func ("/logic/dates", test_dates);
+    Test.add_func ("/logic/status-kind", test_status_kind);
     Test.add_func ("/logic/types", test_types);
     Test.add_func ("/logic/filter", test_filter);
     Test.add_func ("/logic/group", test_group);

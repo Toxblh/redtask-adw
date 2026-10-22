@@ -46,93 +46,203 @@ namespace Redmine {
     }
 
     /** Строка списка задач: «#номер тема», ниже — статус · проект · исполнитель · когда. */
+    /** Статус пилюлей: полупрозрачный фон и цветной текст по виду (style.css, .status-pill). */
+    public Gtk.Label status_pill (string name, bool closed) {
+        var l = new Gtk.Label (name) { ellipsize = Pango.EllipsizeMode.END, max_width_chars = 20, valign = Gtk.Align.CENTER };
+        l.add_css_class ("status-pill");
+        l.add_css_class ("caption");
+        string[] cls = { "todo", "in-progress", "done", "rejected" };
+        l.add_css_class (cls[status_kind (name, closed)]);
+        return l;
+    }
+
+    /** Строка списка — раскладка карточки IssueCard с Android. */
     public class IssueRow : Gtk.ListBoxRow {
         public Issue issue;
 
+        private static Gtk.Label caption (string text, bool dim = true) {
+            var l = new Gtk.Label (text) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
+            l.add_css_class ("caption");
+            if (dim) l.add_css_class ("dim-label");
+            return l;
+        }
+
         public IssueRow (Issue i, bool show_project = true) {
             issue = i;
-            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 3);
+            var closed = i.status_closed;
+            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 4);
             box.add_css_class ("issue-row");
-            var top = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
-            var num = new Gtk.Label ("#%d".printf (i.id)) { xalign = 0, valign = Gtk.Align.START };
-            num.add_css_class ("dim-label");
-            num.add_css_class ("numeric");
-            top.append (num);
-            var subj = new Gtk.Label (i.subject) {
-                xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, lines = 2,
-                ellipsize = Pango.EllipsizeMode.END, hexpand = true,
-            };
-            if (i.status_closed) subj.add_css_class ("dim-label");
-            top.append (subj);
+            // выполненные приглушены, тема зачёркнута — как в веб-Redmine
+            if (closed) box.opacity = 0.55;
+
+            var top = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
+            top.append (status_pill (i.status.name, closed));
+            var tr = caption ("%s #%d".printf (i.tracker.name, i.id));
+            tr.hexpand = true;
+            tr.add_css_class ("numeric");
+            top.append (tr);
+            top.append (caption (format_relative (i.updated_on)));
             if (Prefs.get_default ().is_favorite (i.id)) {
-                var star = new Gtk.Image.from_icon_name ("starred-symbolic") { valign = Gtk.Align.START, tooltip_text = _("Favorite") };
+                var star = new Gtk.Image.from_icon_name ("starred-symbolic") { tooltip_text = _("Favorite") };
                 star.add_css_class ("dim-label");
                 top.append (star);
             }
             box.append (top);
-            var parts = new GenericArray<string> ();
-            parts.add (i.status.name);
-            if (show_project) parts.add (i.project.name);
+
+            var subj = new Gtk.Label (i.subject) {
+                xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, lines = 2,
+                ellipsize = Pango.EllipsizeMode.END,
+            };
+            subj.add_css_class ("heading");
+            if (closed) subj.add_css_class ("closed-issue");
+            box.append (subj);
+            if (show_project) box.append (caption (i.project.name));
+
+            var meta = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 12) { margin_top = 4 };
+            var pc = priority_class (i.priority.name);
+            meta.append (icon_text ("emoji-flags-symbolic", i.priority.name, pc));
+            if (i.due_date != "") {
+                var overdue = is_overdue (i.due_date) && !closed;
+                var delta = closed ? null : due_delta (i.due_date);
+                meta.append (icon_text ("x-office-calendar-symbolic", format_date (i.due_date) + (delta != null ? " · " + delta : ""), overdue ? "error" : "dim-label"));
+            }
             var a = i.assigned_to;
-            if (a != null) parts.add (a.name);
-            parts.add (format_relative (i.updated_on));
-            var sub = new Gtk.Label (string.joinv (" · ", parts.data)) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
-            sub.add_css_class ("dim-label");
-            sub.add_css_class ("caption");
-            box.append (sub);
-            if (is_overdue (i.due_date) && !i.status_closed) {
-                var due = new Gtk.Label (_("Overdue: %s").printf (format_date (i.due_date))) { xalign = 0 };
-                due.add_css_class ("caption");
-                due.add_css_class ("error");
-                box.append (due);
+            if (a != null) {
+                var who = caption (a.name);
+                who.hexpand = true;
+                who.xalign = 1;
+                who.max_width_chars = 18;
+                meta.append (who);
+                meta.append (Avatars.make (a.id, a.name, 28));
+            }
+            box.append (meta);
+
+            if (i.done_ratio > 0) {
+                var prog = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_top = 2 };
+                prog.append (new Gtk.LevelBar.for_interval (0, 100) { value = i.done_ratio, hexpand = true, valign = Gtk.Align.CENTER });
+                prog.append (caption ("%d %%".printf (i.done_ratio)));
+                box.append (prog);
             }
             child = box;
             update_property (Gtk.AccessibleProperty.LABEL, "#%d %s, %s".printf (i.id, i.subject, i.status.name), -1);
         }
+
+        private static Gtk.Box icon_text (string icon, string text, string css) {
+            var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 3);
+            b.add_css_class (css);
+            b.append (new Gtk.Image.from_icon_name (icon) { pixel_size = 14 });
+            var l = new Gtk.Label (text);
+            l.add_css_class ("caption");
+            b.append (l);
+            return b;
+        }
+
+        /** priorityColor с Android: срочные — красным, высокий — акцентом, прочие приглушены. */
+        private static string priority_class (string name) {
+            var n = name.casefold ();
+            if ("immediate" in n || "немедл" in n || "urgent" in n || "срочн" in n) return "error";
+            if ("high" in n || "высок" in n) return "accent";
+            return "dim-label";
+        }
     }
 
-    /** Аватары: память → диск (24 ч) → сеть; нет фото — инициалы AdwAvatar. */
+    /**
+     * Аватары: «кэшировать максимально, дальше только обновлять». Файл на диске показываем сразу, любого возраста;
+     * старше суток — фоном перезапрашиваем и подменяем, ошибка сети оставляет старое. Пустой файл — «фото нет», 10 минут.
+     * Декодируем асинхронно с уменьшением до 128 px — в памяти маленькая текстура, а не мегабайтное фото.
+     */
     public class Avatars : Object {
         private static HashTable<int, Gdk.Texture?>? mem = null;
-        private static HashTable<int, bool>? pending = null;
+        /** Идёт загрузка: все виджеты этого человека, им раздаётся и снимок с диска, и свежее фото. */
+        private static HashTable<int, GenericArray<Adw.Avatar>>? waiting = null;
+        private const int PX = 128;
 
         public static Adw.Avatar make (int user_id, string name, int size = 32) {
             var av = new Adw.Avatar (size, name, true);
-            if (user_id > 0) load.begin (user_id, av);
+            if (user_id > 0) load (user_id, av);
             return av;
         }
 
-        private static async void load (int id, Adw.Avatar av) {
-            if (mem == null) { mem = new HashTable<int, Gdk.Texture?> (direct_hash, direct_equal); pending = new HashTable<int, bool> (direct_hash, direct_equal); }
-            if (mem.contains (id)) { av.custom_image = mem[id]; return; }
+        private static void load (int id, Adw.Avatar av) {
+            if (mem == null) {
+                mem = new HashTable<int, Gdk.Texture?> (direct_hash, direct_equal);
+                waiting = new HashTable<int, GenericArray<Adw.Avatar>> (direct_hash, direct_equal);
+            }
+            if (mem.contains (id)) av.custom_image = mem[id];
+            var list = waiting[id];
+            if (list != null) { list.add (av); return; }
+            if (mem.contains (id)) return;
+            list = new GenericArray<Adw.Avatar> ();
+            list.add (av);
+            waiting[id] = list;
+            fetch.begin (id);
+        }
+
+        private static void publish (int id, Gdk.Texture? t) {
+            mem[id] = t;
+            var list = waiting[id];
+            if (list != null) foreach (var av in list) av.custom_image = t;
+        }
+
+        /** Разбор и уменьшение в отдельном потоке: главный поток не ждёт мегабайтных фото. */
+        private static async Gdk.Texture? decode (Bytes b) {
+            Gdk.Texture? result = null;
+            new Thread<void> ("avatar", () => {
+                result = scale (b);
+                Idle.add (decode.callback);
+            });
+            yield;
+            return result;
+        }
+
+        // встроенные загрузчики GTK (png/jpeg) и масштаб Pixbuf из памяти — без внешних загрузчиков gdk-pixbuf/glycin
+        private static Gdk.Texture? scale (Bytes b) {
+            try {
+                var t = Gdk.Texture.from_bytes (b);
+                if (t.width <= PX && t.height <= PX) return t;
+                var d = new Gdk.TextureDownloader (t);
+                d.set_format (Gdk.MemoryFormat.R8G8B8A8);
+                size_t stride;
+                var px = d.download_bytes (out stride);
+                var pb = new Gdk.Pixbuf.from_bytes (px, Gdk.Colorspace.RGB, true, 8, t.width, t.height, (int) stride);
+                var k = (double) PX / int.max (t.width, t.height);
+                var sm = pb.scale_simple (int.max (1, (int) (t.width * k)), int.max (1, (int) (t.height * k)), Gdk.InterpType.HYPER);
+                return new Gdk.MemoryTexture (sm.width, sm.height, Gdk.MemoryFormat.R8G8B8A8, sm.read_pixel_bytes (), sm.rowstride);
+            } catch (Error e) {
+                debug ("avatar decode: %s", e.message);
+                return null;
+            }
+        }
+
+        private static async void fetch (int id) {
             var s = App.get ().session;
-            if (s == null) return;
+            if (s == null) { waiting.remove (id); return; }
             var key = "avatar-%d".printf (id);
             var f = File.new_for_path (Path.build_filename (s.cache.dir, key));
+            var have = false;
+            var fresh = false;
             try {
-                var info = f.query_info (FileAttribute.TIME_MODIFIED + "," + FileAttribute.STANDARD_SIZE, FileQueryInfoFlags.NONE);
+                var info = yield f.query_info_async (FileAttribute.TIME_MODIFIED + "," + FileAttribute.STANDARD_SIZE, FileQueryInfoFlags.NONE);
                 var age = now_ms () - info.get_modification_date_time ().to_unix () * 1000;
-                // пустой файл — «фото нет», помним 10 минут; фото — сутки
-                if (age < (info.get_size () == 0 ? 10 * 60 * 1000 : DAY_MS)) {
-                    Gdk.Texture? t = info.get_size () == 0 ? null : Gdk.Texture.from_file (f);
-                    mem[id] = t;
-                    av.custom_image = t;
-                    return;
+                if (info.get_size () == 0) {
+                    fresh = age < 10 * 60 * 1000;
+                    if (fresh) publish (id, null);
+                } else {
+                    var t = yield decode (yield f.load_bytes_async (null, null));
+                    if (t != null) { publish (id, t); have = true; }
+                    fresh = have && age < DAY_MS;
                 }
             } catch (Error e) {}
-            // ponytail: одновременные запросы одного аватара — второй виджет получит фото со следующей отрисовкой
-            if (pending.contains (id)) return;
-            pending[id] = true;
-            try {
-                var b = yield s.api.avatar (id);
-                s.cache.save_bytes (key, b ?? new Bytes ({}));
-                Gdk.Texture? t = b != null ? Gdk.Texture.from_bytes (b) : null;
-                mem[id] = t;
-                av.custom_image = t;
-            } catch (Error e) {
-                debug ("avatar %d: %s", id, e.message);
+            if (!fresh) {
+                try {
+                    var b = yield s.api.avatar (id);
+                    s.cache.save_bytes (key, b ?? new Bytes ({}));
+                    publish (id, b != null ? yield decode (b) : null);
+                } catch (Error e) {
+                    debug ("avatar %d: %s", id, e.message); // старое фото (если было) остаётся
+                }
             }
-            pending.remove (id);
+            waiting.remove (id);
         }
     }
 

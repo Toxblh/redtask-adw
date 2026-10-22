@@ -130,6 +130,24 @@ namespace Redmine {
         }
     }
 
+    /** Вид статуса для цвета — порт statusKind из Android (Common.kt), слои те же. */
+    public enum StatusKind { TODO, IN_PROGRESS, DONE, REJECTED }
+
+    public StatusKind status_kind (string name, bool closed) {
+        var n = name.strip ();
+        // слой 1: точные исключения — эвристика их путает
+        switch (n) {
+            case "Заявка обработана": case "Заявка согласована": return StatusKind.IN_PROGRESS;
+            case "Отчислен с курса": case "Заблокирован": case "Прекращено": return StatusKind.REJECTED;
+        }
+        var ci = RegexCompileFlags.CASELESS;
+        // слой 2: ключевые слова отказа
+        if (Regex.match_simple ("отклон|отказ|reject|cancel|аннул|закрыт без|не принят|недейств|упущено|неуспешно", n, ci)) return StatusKind.REJECTED;
+        if (closed) return StatusKind.DONE; // слой 3: машиночитаемый признак конечности
+        if (Regex.match_simple ("^(нов|созд|черновик|драфт|бэклог|backlog|to.?do|open|new|лид|1% лид|заявка|ожидание приёма)", n, ci)) return StatusKind.TODO;
+        return StatusKind.IN_PROGRESS;
+    }
+
     public class Issue : Object {
         public Json.Object o;
         public Issue (Json.Object o) { this.o = o; }

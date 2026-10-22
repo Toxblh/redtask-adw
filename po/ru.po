@@ -1149,3 +1149,6 @@ msgstr "Список задач и задача"
 
 msgid "Mobile layout"
 msgstr "Телефонный вид"
+
+msgid "today"
+msgstr "сегодня"
