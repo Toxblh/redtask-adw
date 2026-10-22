@@ -556,10 +556,13 @@ namespace Redmine {
                 pr_row.activated.connect (() => win ()?.open_issue (pid, 0, true));
             }
             prop (props, _("Updated"), format_datetime (i.updated_on));
+            var blocks = new GenericArray<Json.Object> ();
             foreach (var cf in i.custom_fields) {
                 var val = json_value_display (cf.get_member ("value"));
                 if (val.strip () == "") continue;
-                prop (props, jstr (cf, "name"), val);
+                // длинное, многострочное или с блочной разметкой — Textile-блоком ниже, как на Android/сайте
+                if (cf.get_member ("value").get_node_type () != Json.NodeType.ARRAY && is_block_value (val)) blocks.add (cf);
+                else prop (props, jstr (cf, "name"), val);
             }
             if (can_edit ()) {
                 st.activatable = true;
@@ -568,15 +571,15 @@ namespace Redmine {
             }
             body.append (props);
 
+            foreach (var cf in blocks) {
+                body.append (heading (jstr (cf, "name")));
+                body.append (rich_card (json_value_display (cf.get_member ("value")).replace ("\r\n", "\n").strip ()));
+            }
+
             // описание
             body.append (heading (_("Description")));
             if (i.description.strip () != "") {
-                var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-                card.add_css_class ("card");
-                var rt = new RichText (i.description, i.attachments) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
-                rt.note_activated.connect ((n) => { pending_note = n; scroll_to_note (); });
-                card.append (rt);
-                body.append (card);
+                body.append (rich_card (i.description));
             } else {
                 var none = new Gtk.Label (_("No description")) { xalign = 0 };
                 none.add_css_class ("dim-label");
@@ -781,6 +784,16 @@ namespace Redmine {
             if (name == "description") return _("Description changed");
             if (ov == "") return "%s: %s".printf (label, detail_value (name, nv));
             return "%s: %s → %s".printf (label, detail_value (name, ov), detail_value (name, nv));
+        }
+
+        /** Textile в карточке — описание и длинные настраиваемые поля. */
+        private Gtk.Widget rich_card (string text) {
+            var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
+            card.add_css_class ("card");
+            var rt = new RichText (text, issue.attachments) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
+            rt.note_activated.connect ((n) => { pending_note = n; scroll_to_note (); });
+            card.append (rt);
+            return card;
         }
 
         private Gtk.Widget header_line (int user_id, string user, string when, string? extra, Gtk.Widget? menu) {

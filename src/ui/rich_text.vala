@@ -178,7 +178,7 @@ namespace Redmine {
                 return true;
             }
             if (uri.has_prefix ("user:")) {
-                new PersonDialog (int.parse (uri.substring (5))).present (this);
+                new PersonCard (int.parse (uri.substring (5))).present (this);
                 return true;
             }
             var s = App.get ().session;
@@ -193,62 +193,6 @@ namespace Redmine {
             }
             new Gtk.UriLauncher (target).launch.begin (w, null);
             return true;
-        }
-    }
-
-    /** Карточка человека: имя, логин, должность, отдел, почта; «Открыть профиль в Redmine». */
-    public class PersonDialog : Adw.Dialog {
-        public PersonDialog (int user_id) {
-            title = _("Person");
-            content_width = 420;
-            var page = new Adw.PreferencesPage ();
-            var group = new Adw.PreferencesGroup ();
-            page.add (group);
-            var top = new Gtk.Box (Gtk.Orientation.VERTICAL, 12) { margin_top = 12, margin_bottom = 12 };
-            var tv = new Adw.ToolbarView ();
-            tv.add_top_bar (new Adw.HeaderBar ());
-            var spinner = new Adw.Spinner () { height_request = 32 };
-            top.append (spinner);
-            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-            box.append (top);
-            box.append (page);
-            tv.content = box;
-            child = tv;
-            load.begin (user_id, top, spinner, group);
-        }
-
-        private async void load (int id, Gtk.Box top, Adw.Spinner spinner, Adw.PreferencesGroup group) {
-            var s = App.get ().session;
-            if (s == null) return;
-            try {
-                var p = yield s.refs.person (id);
-                top.remove (spinner);
-                var name = person_short_name (p);
-                top.append (Avatars.make (id, name, 80));
-                var title_l = new Gtk.Label (name) { wrap = true, justify = Gtk.Justification.CENTER };
-                title_l.add_css_class ("title-2");
-                top.append (title_l);
-                void row (Adw.PreferencesGroup g, string t, string v) {
-                    if (v == "") return;
-                    var r = new Adw.ActionRow () { title = t, subtitle = v, subtitle_selectable = true };
-                    r.add_css_class ("property");
-                    g.add (r);
-                }
-                row (group, _("Login"), jstr (p, "login"));
-                row (group, _("Job title"), jstr (p, "job_title"));
-                row (group, _("Department"), jstr (jobj (p, "department"), "name"));
-                var mail = jstr (p, "email") != "" ? jstr (p, "email") : jstr (p, "mail");
-                row (group, _("Email"), mail);
-                row (group, _("Personnel number"), jstr (p, "personnel_number"));
-                var open = new Adw.ButtonRow () { title = _("Open Profile in Redmine"), end_icon_name = "adw-external-link-symbolic" };
-                open.activated.connect (() => new Gtk.UriLauncher (s.server + "/people/%d".printf (id)).launch.begin (get_root () as Gtk.Window, null));
-                group.add (open);
-            } catch (Error e) {
-                top.remove (spinner);
-                var l = new Gtk.Label (e.message) { wrap = true };
-                l.add_css_class ("error");
-                top.append (l);
-            }
         }
     }
 }

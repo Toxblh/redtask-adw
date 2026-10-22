@@ -11,6 +11,11 @@ void test_dates () {
     assert (format_hours (2.0) == "2" && format_hours (1.5) == "1.5");
     // список значений настраиваемого поля — без висящих разделителей
     assert (json_value_display (json_parse ("[\"a\", \"b\"]")) == "a, b");
+    assert (!is_block_value ("Москва"));
+    assert (is_block_value ("|_.Статья|_.Сумма|"));
+    assert (is_block_value ("строка\nещё"));
+    assert (is_block_value ("* Паспорт"));
+    assert (!is_block_value ("*Итого* 100"));
     assert (parse_hours ("1,5") == 1.5 && parse_hours ("1:30") == 1.5 && parse_hours ("x") < 0);
     assert (format_relative ("2023-11-14T22:13:20Z", 1700000000000 + 5 * 60000) == _("%d min").printf (5));
 }

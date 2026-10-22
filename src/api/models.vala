@@ -97,6 +97,11 @@ namespace Redmine {
         return n;
     }
 
+    /** Значение настраиваемого поля — Textile-блоком на всю ширину: многострочное, длинное или с блочной разметкой (как isBlockValue на Android). */
+    public bool is_block_value (string text) {
+        return "\n" in text || text.char_count () > 80 || /(?m)^\s*(\||h[1-6]\.\s|[*#]+\s|bq\.\s)|<pre>|![^\s!]+!/.match (text);
+    }
+
     /** Значение настраиваемого поля для показа: строка или массив строк через запятую. */
     public string json_value_display (Json.Node? n) {
         if (n == null || n.is_null ()) return "";
