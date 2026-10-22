@@ -5,3 +5,4 @@ _build/
 flatpak-repo/
 epm.lock
 *.flatpak
+build-flatpak/

@@ -47,6 +47,8 @@ namespace Redmine {
             banner = new Adw.Banner (_("Could not refresh — showing the saved list")) { button_label = _("_Retry") };
             banner.button_clicked.connect (() => reload (false));
             append (banner);
+            // капча WAF, которую автоповтор не прошёл: кнопка видна, пока сервер отвечает проверкой
+            append (captcha_button (() => reload (false)));
 
             list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.SINGLE };
             list.add_css_class ("navigation-sidebar");
@@ -137,7 +139,6 @@ namespace Redmine {
                     if (my_gen == gen && missing.length > 0) {
                         var parts = new GenericArray<string> ();
                         foreach (var id in missing) parts.add ("#%d".printf (id));
-                        parts.add (null);
                         win_of (this)?.toast (_("Unavailable (deleted or no access): %s").printf (string.joinv (", ", parts.data)));
                     }
                 } else {

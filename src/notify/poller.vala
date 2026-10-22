@@ -273,7 +273,6 @@ namespace Redmine {
         private async string journal_text (Session s, Issue issue, Json.Object j) {
             var parts = new GenericArray<string> ();
             foreach (var d in jarr (j, "details")) parts.add (yield detail_text (s, issue, d));
-            parts.add (null);
             var details = string.joinv (", ", parts.data);
             var note = Textile.preview (jstr (j, "notes"));
             if (details != "" && note != "") return details + " — " + note;

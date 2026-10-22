@@ -106,14 +106,12 @@ namespace Redmine {
             state.retry_clicked.connect (() => load.begin ());
 
             bottom = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { halign = Gtk.Align.CENTER, margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
-            comment_btn = new Gtk.Button () { child = new Adw.ButtonContent () { icon_name = "chat-message-new-symbolic", label = _("Comment") }, tooltip_text = _("Add Comment") };
+            comment_btn = new Gtk.Button () { child = new Adw.ButtonContent () { icon_name = "chat-message-new-symbolic", label = _("Comment"), can_shrink = true }, tooltip_text = _("Add Comment") };
             comment_btn.add_css_class ("suggested-action");
-            comment_btn.add_css_class ("pill");
             comment_btn.action_name = "issue.comment";
             // длинное название статуса не должно распирать окно на телефоне
             status_label = new Gtk.Label (_("Status")) { ellipsize = Pango.EllipsizeMode.END, max_width_chars = 18 };
             status_btn = new Gtk.MenuButton () { child = status_label, tooltip_text = _("Change Status"), always_show_arrow = true };
-            status_btn.add_css_class ("pill");
             time_btn = new Gtk.Button () { icon_name = "alarm-symbolic", tooltip_text = _("Log Time"), action_name = "issue.log-time", valign = Gtk.Align.CENTER };
             time_btn.add_css_class ("circular");
             bottom.append (comment_btn);
@@ -236,7 +234,9 @@ namespace Redmine {
                 int[] missing;
                 foreach (var i in yield s.api.issues_by_ids (ids, out missing)) linked[i.id] = i;
                 if (my == gen) render ();
-            } catch (Error e) {}
+            } catch (Error e) {
+                debug ("linked issues: %s", e.message);
+            }
         }
 
         // ---------- действия ----------

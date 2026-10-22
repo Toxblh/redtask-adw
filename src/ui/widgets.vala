@@ -76,7 +76,6 @@ namespace Redmine {
             var a = i.assigned_to;
             if (a != null) parts.add (a.name);
             parts.add (format_relative (i.updated_on));
-            parts.add (null);
             var sub = new Gtk.Label (string.joinv (" · ", parts.data)) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
             sub.add_css_class ("dim-label");
             sub.add_css_class ("caption");

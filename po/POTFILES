@@ -1,5 +1,4 @@
 data/ru.toxblh.RedmineAdw.desktop.in
-data/ru.toxblh.RedmineAdw.gschema.xml
 data/ru.toxblh.RedmineAdw.metainfo.xml.in
 data/ui/window.ui
 src/api/client.vala

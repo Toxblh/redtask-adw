@@ -218,7 +218,6 @@ namespace Redmine {
                     n.get_object ().get_array_member ("errors").foreach_element ((a, i, e) => {
                         if (e.get_node_type () == Json.NodeType.VALUE) parts.add (e.get_string ());
                     });
-                    parts.add (null);
                     detail = string.joinv (", ", parts.data);
                 }
                 string m;
@@ -396,7 +395,6 @@ namespace Redmine {
             for (int i = 0; i < ids.length; i += 100) {
                 var parts = new GenericArray<string> ();
                 for (int j = i; j < int.min (i + 100, ids.length); j++) parts.add (ids[j].to_string ());
-                parts.add (null);
                 var o = yield get_obj ("issues.json", new Query ()
                     .add ("issue_id", string.joinv (",", parts.data)).add ("status_id", "*").add ("limit", "100"));
                 foreach (var x in jarr (o, "issues")) found[jint (x, "id")] = new Issue (x);

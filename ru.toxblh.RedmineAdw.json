@@ -1,0 +1,24 @@
+{
+  "id": "ru.toxblh.RedmineAdw",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "command": "redmine-adw",
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri"
+  ],
+  "cleanup": ["/include", "/lib/pkgconfig", "/share/vala", "*.la", "*.a"],
+  "modules": [
+    {
+      "name": "redmine-adw",
+      "buildsystem": "meson",
+      "sources": [
+        { "type": "dir", "path": "." }
+      ]
+    }
+  ]
+}

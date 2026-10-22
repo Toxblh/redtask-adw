@@ -259,7 +259,9 @@ namespace Redmine {
 }
 
 int main (string[] args) {
-    Intl.bindtextdomain (Config.GETTEXT_PACKAGE, Config.LOCALEDIR);
+    Intl.setlocale (LocaleCategory.ALL, "");
+    // запуск из каталога сборки: переводы лежат в build/po (tools/dev.sh)
+    Intl.bindtextdomain (Config.GETTEXT_PACKAGE, Environment.get_variable ("REDMINE_ADW_LOCALEDIR") ?? Config.LOCALEDIR);
     Intl.bind_textdomain_codeset (Config.GETTEXT_PACKAGE, "UTF-8");
     Intl.textdomain (Config.GETTEXT_PACKAGE);
     return new Redmine.App ().run (args);

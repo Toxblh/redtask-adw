@@ -1,4 +1,1151 @@
 msgid ""
 msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: redmine-adw\n"
 "Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Redmine"
+msgstr "Redmine"
+
+msgid "Native GNOME client for Redmine"
+msgstr "Нативный клиент Redmine для GNOME"
+
+msgid "translator-credits"
+msgstr "Антон Пальгунов"
+
+msgid "Check Redmine for new notifications"
+msgstr "Проверять Redmine на новые уведомления"
+
+msgid "now"
+msgstr "сейчас"
+
+msgid "%d min"
+msgstr "%d мин"
+
+msgid "%d h"
+msgstr "%d ч"
+
+msgid "%d d"
+msgstr "%d д"
+
+msgid "Bad server address"
+msgstr "Неверный адрес сервера"
+
+msgid "Bad address: %s"
+msgstr "Неверный адрес: %s"
+
+msgid "Server asks for a captcha (Security check)"
+msgstr "Сервер просит пройти капчу (Security check)"
+
+msgid "Unexpected response from server"
+msgstr "Неожиданный ответ сервера"
+
+msgid "Unauthorized: check the API key"
+msgstr "Нет доступа: проверьте API-ключ"
+
+msgid "Forbidden"
+msgstr "Запрещено"
+
+msgid "Not found"
+msgstr "Не найдено"
+
+msgid "Validation failed"
+msgstr "Сервер отклонил данные"
+
+msgid "Someone"
+msgstr "Кто-то"
+
+msgid "%s mentioned you: %s"
+msgstr "%s упомянул(а) вас: %s"
+
+msgid "new issue (%s)"
+msgstr "новая задача (%s)"
+
+msgid "status"
+msgstr "статус"
+
+msgid "priority"
+msgstr "приоритет"
+
+msgid "tracker"
+msgstr "трекер"
+
+msgid "version"
+msgstr "версия"
+
+msgid "assignee"
+msgstr "исполнитель"
+
+msgid "category"
+msgstr "категория"
+
+msgid "project"
+msgstr "проект"
+
+msgid "parent issue"
+msgstr "родительская задача"
+
+msgid "progress"
+msgstr "готовность"
+
+msgid "due date"
+msgstr "срок"
+
+msgid "start date"
+msgstr "начало"
+
+msgid "estimate"
+msgstr "оценка"
+
+msgid "subject"
+msgstr "тема"
+
+msgid "description changed"
+msgstr "описание изменено"
+
+msgid "issue made private"
+msgstr "задача стала приватной"
+
+msgid "issue made public"
+msgstr "задача стала публичной"
+
+msgid "field"
+msgstr "поле"
+
+msgid "file: %s"
+msgstr "файл: %s"
+
+msgid "file removed: %s"
+msgstr "файл удалён: %s"
+
+msgid "relation with #%s"
+msgstr "связь с #%s"
+
+msgid "relation with #%s removed"
+msgstr "связь с #%s удалена"
+
+msgid "The issue was deleted or is no longer available"
+msgstr "Задача удалена или больше недоступна"
+
+msgid "time logged: %s h"
+msgstr "списано времени: %s ч"
+
+msgid "Overdue since %s"
+msgstr "Просрочена с %s"
+
+msgid "Due today"
+msgstr "Срок сегодня"
+
+msgid "Due tomorrow"
+msgstr "Срок завтра"
+
+msgid "Mute Issue"
+msgstr "Не уведомлять по задаче"
+
+msgid "For me"
+msgstr "Мне"
+
+msgid "Discussion"
+msgstr "Обсуждение"
+
+msgid "Progress"
+msgstr "Готовность"
+
+msgid "Deadlines"
+msgstr "Сроки"
+
+msgid "Projects"
+msgstr "Проекты"
+
+msgid "Assigned to me"
+msgstr "Назначенные мне"
+
+msgid "Left me: reassigned or deleted"
+msgstr "Ушла от меня: переназначена или удалена"
+
+msgid "Mentions"
+msgstr "Упоминания"
+
+msgid "New comment"
+msgstr "Новый комментарий"
+
+msgid "Private note"
+msgstr "Приватная заметка"
+
+msgid "Status change"
+msgstr "Смена статуса"
+
+msgid "Priority change"
+msgstr "Смена приоритета"
+
+msgid "Due date changed"
+msgstr "Изменён срок"
+
+msgid "Attachments"
+msgstr "Вложения"
+
+msgid "Time logged"
+msgstr "Списано время"
+
+msgid "Due tomorrow, today or overdue"
+msgstr "Срок завтра, сегодня или просрочен"
+
+msgid "New issue in my projects"
+msgstr "Новая задача в моих проектах"
+
+msgid "Other field changes"
+msgstr "Прочие изменения полей"
+
+msgid "Bold"
+msgstr "Жирный"
+
+msgid "Italic"
+msgstr "Курсив"
+
+msgid "Strikethrough"
+msgstr "Зачёркнутый"
+
+msgid "Inline Code"
+msgstr "Код в строке"
+
+msgid "Code Block"
+msgstr "Блок кода"
+
+msgid "Quote"
+msgstr "Цитата"
+
+msgid "Bulleted List"
+msgstr "Маркированный список"
+
+msgid "Numbered List"
+msgstr "Нумерованный список"
+
+msgid "Heading"
+msgstr "Заголовок"
+
+msgid "Link"
+msgstr "Ссылка"
+
+msgid "Issue Reference"
+msgstr "Ссылка на задачу"
+
+msgid "Mention a Person"
+msgstr "Упомянуть человека"
+
+msgid "Table"
+msgstr "Таблица"
+
+msgid "Column"
+msgstr "Колонка"
+
+msgid "Insert Image"
+msgstr "Вставить картинку"
+
+msgid "Preview"
+msgstr "Предпросмотр"
+
+msgid "Text"
+msgstr "Текст"
+
+msgid "Nothing to preview yet"
+msgstr "Пока нечего показывать"
+
+msgid "Back to Editing"
+msgstr "Вернуться к правке"
+
+msgid "Insert Link"
+msgstr "Вставить ссылку"
+
+msgid "Address"
+msgstr "Адрес"
+
+msgid "Link text (optional)"
+msgstr "Текст ссылки (необязательно)"
+
+msgid "_Cancel"
+msgstr "_Отмена"
+
+msgid "_Insert"
+msgstr "_Вставить"
+
+msgid "Images attached to the issue"
+msgstr "Картинки, приложенные к задаче"
+
+msgid "Issue number or subject"
+msgstr "Номер или тема задачи"
+
+msgid "this issue"
+msgstr "эта задача"
+
+msgid "Name or login"
+msgstr "Имя или логин"
+
+msgid "File %s is larger than 25 MB"
+msgstr "Файл %s больше 25 МБ"
+
+msgid "Could not upload %s: %s"
+msgstr "Не удалось загрузить %s: %s"
+
+msgid "Edit Comment"
+msgstr "Изменить комментарий"
+
+msgid "Add Comment"
+msgstr "Добавить комментарий"
+
+msgid "_Save"
+msgstr "_Сохранить"
+
+msgid "_Send"
+msgstr "_Отправить"
+
+msgid "Private comment. You may not change this flag: it will stay private."
+msgstr "Приватный комментарий. Менять эту пометку вам нельзя: он останется приватным."
+
+msgid "Could not find out whether you may change the private flag. If not, the server will keep it as it was."
+msgstr "Не удалось узнать, можно ли вам менять пометку «приватно». Если нельзя, сервер оставит её прежней."
+
+msgid "The private comment was not quoted: you may not write private notes, and a reply with its text would be visible to everyone. You can reply without the quote."
+msgstr "Приватный комментарий не процитирован: у вас нет права писать приватные заметки, и ответ с его текстом был бы виден всем. Ответить без цитаты можно."
+
+msgid "wrote"
+msgstr "написал(а)"
+
+msgid "Attach Files…"
+msgstr "Прикрепить файлы…"
+
+msgid "You may not write private notes: the server would publish this comment openly. Remove what must stay private and clear “Private note” to send."
+msgstr "У вас нет права писать приватные заметки: сервер опубликует этот комментарий открыто. Уберите то, что должно остаться приватным, и снимите пометку «Приватная заметка», чтобы отправить."
+
+msgid "Could not find out whether you may write private notes. If not, the server will publish this comment openly."
+msgstr "Не удалось узнать, можно ли вам писать приватные заметки. Если нельзя, сервер опубликует этот комментарий открыто."
+
+msgid "The private comment was not quoted"
+msgstr "Приватный комментарий не процитирован"
+
+msgid "Attach Files"
+msgstr "Прикрепить файлы"
+
+msgid "Remove %s"
+msgstr "Убрать %s"
+
+msgid "Pick a Date"
+msgstr "Выбрать дату"
+
+msgid "Clear"
+msgstr "Очистить"
+
+msgid "Edit Time Entry"
+msgstr "Изменить трудозатраты"
+
+msgid "Log Time"
+msgstr "Списать время"
+
+msgid "Hours"
+msgstr "Часы"
+
+msgid "Activity"
+msgstr "Деятельность"
+
+msgid "Comment"
+msgstr "Комментарий"
+
+msgid "Date"
+msgstr "Дата"
+
+msgid "Enter the hours, for example 1.5 or 1:30"
+msgstr "Укажите часы, например 1,5 или 1:30"
+
+msgid "Date format: YYYY-MM-DD"
+msgstr "Формат даты: ГГГГ-ММ-ДД"
+
+msgid "Add Relation"
+msgstr "Добавить связь"
+
+msgid "_Add"
+msgstr "_Добавить"
+
+msgid "Type"
+msgstr "Тип"
+
+msgid "Issue"
+msgstr "Задача"
+
+msgid "Not selected"
+msgstr "Не выбрана"
+
+msgid "Find Issue"
+msgstr "Найти задачу"
+
+msgid "Delay, days"
+msgstr "Задержка, дней"
+
+msgid "Choose an issue"
+msgstr "Выберите задачу"
+
+msgid "New Subtask"
+msgstr "Новая подзадача"
+
+msgid "New Issue"
+msgstr "Новая задача"
+
+msgid "C_reate"
+msgstr "_Создать"
+
+msgid "Edit Issue"
+msgstr "Изменить задачу"
+
+msgid "Project"
+msgstr "Проект"
+
+msgid "Tracker"
+msgstr "Трекер"
+
+msgid "Subject"
+msgstr "Тема"
+
+msgid "Description"
+msgstr "Описание"
+
+msgid "Fields"
+msgstr "Поля"
+
+msgid "Status"
+msgstr "Статус"
+
+msgid "Priority"
+msgstr "Приоритет"
+
+msgid "Assignee"
+msgstr "Исполнитель"
+
+msgid "Category"
+msgstr "Категория"
+
+msgid "Version"
+msgstr "Версия"
+
+msgid "Parent issue"
+msgstr "Родительская задача"
+
+msgid "None"
+msgstr "Нет"
+
+msgid "Start date"
+msgstr "Начало"
+
+msgid "Due date"
+msgstr "Срок"
+
+msgid "Estimate, hours"
+msgstr "Оценка, часов"
+
+msgid "Progress, %"
+msgstr "Готовность, %"
+
+msgid "Private issue"
+msgstr "Приватная задача"
+
+msgid "Custom fields"
+msgstr "Настраиваемые поля"
+
+msgid "Files"
+msgstr "Файлы"
+
+msgid "Not assigned"
+msgstr "Не назначен"
+
+msgid "Enter the subject"
+msgstr "Укажите тему"
+
+msgid "Choose a project"
+msgstr "Выберите проект"
+
+msgid "Enter the estimate in hours"
+msgstr "Укажите оценку в часах"
+
+msgid "Fill in the required fields: %s"
+msgstr "Заполните обязательные поля: %s"
+
+msgid "Related to"
+msgstr "Связана с"
+
+msgid "Duplicates"
+msgstr "Дублирует"
+
+msgid "Duplicated by"
+msgstr "Дублируется"
+
+msgid "Blocks"
+msgstr "Блокирует"
+
+msgid "Blocked by"
+msgstr "Блокируется"
+
+msgid "Precedes"
+msgstr "Предшествует"
+
+msgid "Follows"
+msgstr "Следует за"
+
+msgid "Copied to"
+msgstr "Скопирована в"
+
+msgid "Copied from"
+msgstr "Скопирована из"
+
+msgid "Estimate"
+msgstr "Оценка"
+
+msgid "Private"
+msgstr "Приватная"
+
+msgid "Issue Menu"
+msgstr "Меню задачи"
+
+msgid "Change Status"
+msgstr "Сменить статус"
+
+msgid "Remove from Favorites"
+msgstr "Убрать из избранного"
+
+msgid "Add to Favorites"
+msgstr "Добавить в избранное"
+
+msgid "Could not refresh the issue: %s"
+msgstr "Не удалось обновить задачу: %s"
+
+msgid "Issue number copied"
+msgstr "Номер задачи скопирован"
+
+msgid "Link copied"
+msgstr "Ссылка скопирована"
+
+msgid "Issue number, subject and link copied"
+msgstr "Номер, тема и ссылка скопированы"
+
+msgid "Saved"
+msgstr "Сохранено"
+
+msgid "Notifications for this issue are off"
+msgstr "Уведомления по задаче отключены"
+
+msgid "Notifications for this issue are on"
+msgstr "Уведомления по задаче включены"
+
+msgid "_Edit Issue…"
+msgstr "_Изменить задачу…"
+
+msgid "Add _Subtask…"
+msgstr "Добавить _подзадачу…"
+
+msgid "Add _Relation…"
+msgstr "Добавить _связь…"
+
+msgid "_Attach Files…"
+msgstr "_Прикрепить файлы…"
+
+msgid "_Priority"
+msgstr "_Приоритет"
+
+msgid "Pro_gress"
+msgstr "_Готовность"
+
+msgid "Assign to _Me"
+msgstr "_Взять себе"
+
+msgid "Copy Issue _Number"
+msgstr "Копировать _номер задачи"
+
+msgid "Copy _Link"
+msgstr "Копировать _ссылку"
+
+msgid "S_hare"
+msgstr "_Поделиться"
+
+msgid "Open in _Browser"
+msgstr "Открыть в _браузере"
+
+msgid "_Stop Watching"
+msgstr "_Не следить"
+
+msgid "_Watch"
+msgstr "_Следить"
+
+msgid "_Notify About This Issue"
+msgstr "_Уведомлять по задаче"
+
+msgid "_Mute Notifications"
+msgstr "Не _уведомлять по задаче"
+
+msgid "Take the Issue?"
+msgstr "Взять задачу на себя?"
+
+msgid "You will become the assignee of “%s”."
+msgstr "Исполнителем «%s» станете вы."
+
+msgid "_Take"
+msgstr "_Взять"
+
+msgid "You are watching this issue"
+msgstr "Вы следите за задачей"
+
+msgid "You stopped watching this issue"
+msgstr "Вы больше не следите за задачей"
+
+msgid "The server does not allow changing watchers from the app — opening the website"
+msgstr "Сервер не позволяет менять наблюдателей из приложения — открываю веб-версию"
+
+msgid "File attached"
+msgid_plural "%u files attached"
+msgstr[0] "Прикреплён %u файл"
+msgstr[1] "Прикреплено %u файла"
+msgstr[2] "Прикреплено %u файлов"
+
+msgid "Created by %s · %s"
+msgstr "Создал(а) %s · %s"
+
+msgid "private"
+msgstr "приватная"
+
+msgid "Take"
+msgstr "Взять"
+
+msgid "Assign to Me"
+msgstr "Взять себе"
+
+msgid "overdue"
+msgstr "просрочена"
+
+msgid "%s h"
+msgstr "%s ч"
+
+msgid "(total %s)"
+msgstr "(всего %s)"
+
+msgid "Spent time"
+msgstr "Затрачено"
+
+msgid "Updated"
+msgstr "Обновлена"
+
+msgid "No description"
+msgstr "Без описания"
+
+msgid "Comments"
+msgstr "Комментарии"
+
+msgid "Changes"
+msgstr "Действия"
+
+msgid "Time"
+msgstr "Время"
+
+msgid "All"
+msgstr "Все"
+
+msgid "Newest First"
+msgstr "Сначала новые"
+
+msgid "Oldest First"
+msgstr "Сначала старые"
+
+msgid "Subtasks"
+msgstr "Подзадачи"
+
+msgid "Add Subtask"
+msgstr "Добавить подзадачу"
+
+msgid "Relations"
+msgstr "Связи"
+
+msgid "+%d d"
+msgstr "+%d дн."
+
+msgid "Remove Relation"
+msgstr "Убрать связь"
+
+msgid "Remove Relation?"
+msgstr "Убрать связь?"
+
+msgid "The relation with #%d will be removed."
+msgstr "Связь с #%d будет удалена."
+
+msgid "_Remove"
+msgstr "_Убрать"
+
+msgid "Delete %s"
+msgstr "Удалить %s"
+
+msgid "Delete File?"
+msgstr "Удалить файл?"
+
+msgid "“%s” will be deleted from the issue."
+msgstr "«%s» будет удалён из задачи."
+
+msgid "_Delete"
+msgstr "_Удалить"
+
+msgid "Watchers"
+msgstr "Наблюдатели"
+
+msgid "File added: %s"
+msgstr "Добавлен файл: %s"
+
+msgid "File deleted: %s"
+msgstr "Удалён файл: %s"
+
+msgid "Relation added: %s #%s"
+msgstr "Добавлена связь: %s #%s"
+
+msgid "Relation removed: %s #%s"
+msgstr "Удалена связь: %s #%s"
+
+msgid "Description changed"
+msgstr "Описание изменено"
+
+msgid "private note"
+msgstr "приватная заметка"
+
+msgid "edited"
+msgstr "изм."
+
+msgid "Comment Menu"
+msgstr "Меню комментария"
+
+msgid "_Reply with Quote"
+msgstr "_Ответить с цитатой"
+
+msgid "_Edit"
+msgstr "_Изменить"
+
+msgid "Delete This Comment?"
+msgstr "Удалить этот комментарий?"
+
+msgid "Time Entry Menu"
+msgstr "Меню трудозатрат"
+
+msgid "Delete Time Entry?"
+msgstr "Удалить запись трудозатрат?"
+
+msgid "%s h will be removed from the issue."
+msgstr "%s ч будут удалены из задачи."
+
+msgid "Total: %s h"
+msgstr "Итого: %s ч"
+
+msgid "created the issue"
+msgstr "создал(а) задачу"
+
+msgid "No comments yet"
+msgstr "Комментариев пока нет"
+
+msgid "No changes"
+msgstr "Изменений нет"
+
+msgid "No time logged"
+msgstr "Трудозатрат нет"
+
+msgid "Nothing yet"
+msgstr "Пока пусто"
+
+msgid "Open"
+msgstr "Открытые"
+
+msgid "Closed"
+msgstr "Закрытые"
+
+msgid "Search in this list"
+msgstr "Поиск в текущем списке"
+
+msgid "Could not refresh — showing the saved list"
+msgstr "Не удалось обновить — показан сохранённый список"
+
+msgid "_Retry"
+msgstr "_Повторить"
+
+msgid "Nothing Here Yet"
+msgstr "Пока пусто"
+
+msgid "Unavailable (deleted or no access): %s"
+msgstr "Недоступны (удалены или нет доступа): %s"
+
+msgid "captcha"
+msgstr "капча"
+
+msgid "Could not load more"
+msgstr "Не удалось загрузить ещё"
+
+msgid "New Issue in Project"
+msgstr "Новая задача в проекте"
+
+msgid "Search"
+msgstr "Поиск"
+
+msgid "Find a project"
+msgstr "Найти проект"
+
+msgid "No Projects"
+msgstr "Проектов нет"
+
+msgid "Text or issue number"
+msgstr "Текст или номер задачи"
+
+msgid "Search Issues"
+msgstr "Поиск задач"
+
+msgid "Enter text or an issue number"
+msgstr "Введите текст или номер задачи"
+
+msgid "Nothing Found"
+msgstr "Ничего не найдено"
+
+msgid "Connect to Redmine"
+msgstr "Подключение к Redmine"
+
+msgid "Sign in on the website — the app picks up your API key automatically"
+msgstr "Войдите на сайте — приложение подхватит API-ключ автоматически"
+
+msgid "Server Address"
+msgstr "Адрес сервера"
+
+msgid "_Sign In on Website…"
+msgstr "_Войти через сайт…"
+
+msgid "API Key"
+msgstr "API-ключ"
+
+msgid "My account → API access key → Show"
+msgstr "Моя учётная запись → Ключ доступа к API → Показать"
+
+msgid "Sign _In"
+msgstr "_Войти"
+
+msgid "Enter API key manually"
+msgstr "Ввести ключ API вручную"
+
+msgid "Main Menu"
+msgstr "Главное меню"
+
+msgid "_Keyboard Shortcuts"
+msgstr "_Комбинации клавиш"
+
+msgid "_About Redmine"
+msgstr "_О приложении"
+
+msgid "Sign In"
+msgstr "Вход"
+
+msgid "Sign in to your Redmine account — the app picks up the key automatically"
+msgstr "Войдите в свой аккаунт Redmine — приложение подхватит ключ автоматически"
+
+msgid "Pass the Check and Press Done"
+msgstr "Пройдите проверку и нажмите «Готово»"
+
+msgid "_Done"
+msgstr "_Готово"
+
+msgid "_Solve Captcha"
+msgstr "_Решить капчу"
+
+msgid "Feed"
+msgstr "Лента"
+
+msgid "By Issue"
+msgstr "По задачам"
+
+msgid "Show"
+msgstr "Показать"
+
+msgid "Check Now"
+msgstr "Проверить сейчас"
+
+msgid "Could not check for notifications"
+msgstr "Не удалось проверить уведомления"
+
+msgid "Today"
+msgstr "Сегодня"
+
+msgid "Yesterday"
+msgstr "Вчера"
+
+msgid "No Notifications Yet"
+msgstr "Уведомлений пока нет"
+
+msgid "Comments, mentions and changes in your issues will appear here"
+msgstr "Здесь появятся комментарии, упоминания и изменения в ваших задачах"
+
+msgid "Notifications for #%d are off"
+msgstr "Уведомления по #%d отключены"
+
+msgid "Notifications for #%d are on"
+msgstr "Уведомления по #%d включены"
+
+msgid "Notifications for project “%s” are off"
+msgstr "Уведомления по проекту «%s» отключены"
+
+msgid "Notifications for project “%s” are on"
+msgstr "Уведомления по проекту «%s» включены"
+
+msgid "Notify About Issue"
+msgstr "Уведомлять по задаче"
+
+msgid "Notify About Project"
+msgstr "Уведомлять по проекту"
+
+msgid "Mute Project"
+msgstr "Не уведомлять по проекту"
+
+msgid "New"
+msgstr "Новое"
+
+msgid "%u event"
+msgid_plural "%u events"
+msgstr[0] "%u событие"
+msgstr[1] "%u события"
+msgstr[2] "%u событий"
+
+msgid "General"
+msgstr "Общие"
+
+msgid "Account"
+msgstr "Учётная запись"
+
+msgid "Sign Out…"
+msgstr "Выйти…"
+
+msgid "Sign Out?"
+msgstr "Выйти?"
+
+msgid "The API key, cached lists and notification history of this account will be removed from this device."
+msgstr "С этого устройства будут удалены API-ключ, сохранённые списки и история уведомлений этой учётной записи."
+
+msgid "_Sign Out"
+msgstr "_Выйти"
+
+msgid "Notifications"
+msgstr "Уведомления"
+
+msgid "Changes in my and watched issues are checked while the app is running"
+msgstr "Изменения в моих и отслеживаемых задачах проверяются, пока приложение запущено"
+
+msgid "Check interval"
+msgstr "Интервал проверки"
+
+msgid "Run in background"
+msgstr "Работать в фоне"
+
+msgid "Keep checking after the window is closed and start when you log in"
+msgstr "Проверять и после закрытия окна, запускаться при входе в систему"
+
+msgid "Last check"
+msgstr "Последняя проверка"
+
+msgid "Checked"
+msgstr "Проверено"
+
+msgid "Send Test Notification"
+msgstr "Тестовое уведомление"
+
+msgid "Example issue"
+msgstr "Пример задачи"
+
+msgid "Ivan Ivanov: this is how a comment notification looks"
+msgstr "Иван Иванов: так выглядит уведомление о комментарии"
+
+msgid "Only closing or resolving"
+msgstr "Только закрытие или решение"
+
+msgid "Only raising"
+msgstr "Только повышение"
+
+msgid "Which issues"
+msgstr "По каким задачам"
+
+msgid "A disabled source is not polled at all — its events do not reach the history either"
+msgstr "Выключенный источник не опрашивается вовсе — событий по нему не будет и в истории"
+
+msgid "Created by me"
+msgstr "Созданные мной"
+
+msgid "Watched"
+msgstr "Отслеживаемые"
+
+msgid "Favorites only"
+msgstr "Только избранные"
+
+msgid "Of the sources above — only issues marked with a star"
+msgstr "Из выбранных выше — лишь те, что отмечены звёздочкой"
+
+msgid "Muted issues and projects"
+msgstr "Отключённые задачи и проекты"
+
+msgid "A disabled category does not send notifications, but stays in the bell history. There are no quiet hours in the app — use the system Do Not Disturb mode."
+msgstr "Выключенная категория не приходит уведомлением, но остаётся в истории колокольчика. Тихих часов в приложении нет — их заменяет системный режим «Не беспокоить»."
+
+msgid "never"
+msgstr "никогда"
+
+msgid "Comments with my login in any issue I can see, not only mine. Mentions in issue descriptions are not tracked"
+msgstr "Комментарии с моим логином в любых доступных задачах, не только моих. Упоминания в описании задачи не отслеживаются"
+
+msgid "For issues assigned to me; one reminder per due date"
+msgstr "По задачам, назначенным мне; одно напоминание на каждую дату срока"
+
+msgid "Other people's new issues in projects I am a member of. While off, the server is not asked about them and they do not reach the history"
+msgstr "Чужие новые задачи в проектах, где я участник. Пока выключено, сервер об этом не опрашивается — в историю колокольчика они тоже не попадают"
+
+msgid "Nothing is muted"
+msgstr "Ничего не отключено"
+
+msgid "Mute an issue from its notification or menu, an issue or project — from the bell context menu"
+msgstr "Отключить задачу можно кнопкой в уведомлении или в меню задачи, задачу или проект — контекстным меню в колокольчике"
+
+msgid "Unmute"
+msgstr "Включить снова"
+
+msgid "Show details"
+msgstr "Показать подробности"
+
+msgid "Person"
+msgstr "Сотрудник"
+
+msgid "Login"
+msgstr "Логин"
+
+msgid "Job title"
+msgstr "Должность"
+
+msgid "Department"
+msgstr "Отдел"
+
+msgid "Email"
+msgstr "Почта"
+
+msgid "Personnel number"
+msgstr "Табельный №"
+
+msgid "Open Profile in Redmine"
+msgstr "Открыть профиль в Redmine"
+
+msgid "No Connection"
+msgstr "Нет подключения"
+
+msgid "Could Not Load"
+msgstr "Не удалось загрузить"
+
+msgid "Favorite"
+msgstr "Избранное"
+
+msgid "Overdue: %s"
+msgstr "Просрочена: %s"
+
+msgid "Could not open the file: %s"
+msgstr "Не удалось открыть файл: %s"
+
+msgid "Open in Viewer"
+msgstr "Открыть в просмотрщике"
+
+msgid "Could Not Show the File"
+msgstr "Не удалось показать файл"
+
+msgid "Something went wrong"
+msgstr "Что-то пошло не так"
+
+msgid "My Issues"
+msgstr "Мои"
+
+msgid "Watching"
+msgstr "Слежу"
+
+msgid "Favorites"
+msgstr "Избранное"
+
+msgid "Issue #%d created"
+msgstr "Задача #%d создана"
+
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "New issue"
+msgstr "Новая задача"
+
+msgid "Preferences"
+msgstr "Настройки"
+
+msgid "Keyboard shortcuts"
+msgstr "Комбинации клавиш"
+
+msgid "Close window"
+msgstr "Закрыть окно"
+
+msgid "Quit"
+msgstr "Выйти"
+
+msgid "Navigation"
+msgstr "Навигация"
+
+msgid "Go back"
+msgstr "Назад"
+
+msgid "Editor"
+msgstr "Редактор"
+
+msgid "Send"
+msgstr "Отправить"
+
+msgid "_New Issue"
+msgstr "_Новая задача"
+
+msgid "_Refresh"
+msgstr "_Обновить"
+
+msgid "_Preferences"
+msgstr "_Настройки"
+
+msgid "Issues"
+msgstr "Задачи"
+
+msgid "Show Sections"
+msgstr "Показать разделы"
+
+msgid "No Issue Selected"
+msgstr "Задача не выбрана"
+
+msgid "Choose an issue from the list"
+msgstr "Выберите задачу в списке"
+
+msgid "Issues, comments and notifications from Redmine"
+msgstr "Задачи, комментарии и уведомления Redmine"
+
+msgid "redmine;issues;tasks;bug;tracker;"
+msgstr "redmine;задачи;issues;баг;трекер;"
+
+msgid "Native client for Redmine"
+msgstr "Нативный клиент Redmine"
+
+msgid "Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting, status changes, time tracking, attachments and background notifications."
+msgstr "Работа с задачами Redmine с компьютера или телефона: списки, комментарии с разметкой Textile, смена статуса, учёт времени, вложения и фоновые уведомления."
+
+msgid "My issues, watched issues, favorites, projects and search"
+msgstr "Мои и отслеживаемые задачи, избранное, проекты и поиск"
+
+msgid "Issue view with comments, changes and time log"
+msgstr "Задача с комментариями, изменениями и трудозатратами"
+
+msgid "Status, assignee, progress, priority and all fields including custom ones"
+msgstr "Статус, исполнитель, готовность, приоритет и все поля, включая настраиваемые"
+
+msgid "Notifications about comments, mentions and changes"
+msgstr "Уведомления о комментариях, упоминаниях и изменениях"
+
+msgid "Anton Palgunov"
+msgstr "Антон Пальгунов"
+
+msgid "Issue list and issue view"
+msgstr "Список задач и задача"
+
+msgid "Mobile layout"
+msgstr "Телефонный вид"

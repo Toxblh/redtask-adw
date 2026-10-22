@@ -106,7 +106,6 @@ namespace Redmine {
                 var s = json_value_display (e);
                 if (s != "") parts.add (s);
             });
-            parts.add (null);
             return string.joinv (", ", parts.data);
         }
         if (n.get_node_type () == Json.NodeType.VALUE) {

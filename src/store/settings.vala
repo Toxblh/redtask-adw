@@ -72,7 +72,6 @@ namespace Redmine {
                 qsort_with_data<int> (f, sizeof (int), (a, b) => a - b);
                 var parts = new GenericArray<string> ();
                 foreach (var x in f) parts.add (x.to_string ());
-                parts.add (null);
                 k += ":" + string.joinv (",", parts.data);
             }
             return k;
