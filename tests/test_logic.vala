@@ -164,6 +164,31 @@ void test_favourites () {
     assert (fav_to_migrate ({ 244551 }, server).length == 0);
 }
 
+// CSV-экспорт Redmine — источник подписей для полей, которые REST отдаёт числами (как GuardsTest на Android)
+void test_csv () {
+    var rows = parse_csv ("\xEF\xBB\xBF#;Формат публикации;Каналы;Бюджет\n248260;Интервью;\"ИТ СМИ; \"\"свои\"\"\";\"строка 1\nстрока 2\"\n");
+    assert (rows.length == 2);
+    assert (rows[0].length == 4 && rows[0][0] == "#" && rows[0][1] == "Формат публикации" && rows[0][3] == "Бюджет");
+    assert (rows[1][0] == "248260" && rows[1][1] == "Интервью" && rows[1][2] == "ИТ СМИ; \"свои\"" && rows[1][3] == "строка 1\nстрока 2");
+    var en = parse_csv ("#,Type,Empty\r\n5,\"a,b\",\"\"\r\n");
+    assert (en.length == 2 && en[0].length == 3 && en[0][2] == "Empty");
+    assert (en[1].length == 3 && en[1][0] == "5" && en[1][1] == "a,b" && en[1][2] == "");
+    assert (parse_csv ("").length == 0);
+    // подписи: только поля-идентификаторы, по имени колонки, и только если текст отличается от сырого значения
+    var fields = new GenericArray<Json.Object> ();
+    foreach (var j in new string[] { "{\"id\":7,\"name\":\"Продукт(ы)\",\"value\":[\"88\",\"89\"]}", "{\"id\":8,\"name\":\"Тип\",\"value\":\"216\"}",
+                                     "{\"id\":9,\"name\":\"Сумма\",\"value\":\"12\"}", "{\"id\":10,\"name\":\"Дата\",\"value\":\"2026-10-22\"}",
+                                     "{\"id\":11,\"name\":\"Пусто\",\"value\":\"\"}" })
+        fields.add (json_parse (j).get_object ());
+    assert (cf_id_like (fields[0]) && cf_id_like (fields[1]) && !cf_id_like (fields[3]) && !cf_id_like (fields[4]));
+    var l = cf_labels_from_csv (parse_csv ("#;Сумма;Продукт(ы)\n5;12;Альт Сервер, Альт Рабочая станция\n"), fields);
+    assert (jstr (l, "7") == "Альт Сервер, Альт Рабочая станция");
+    assert (!l.has_member ("8")); // колонки нет — сервер её пропустил
+    assert (!l.has_member ("9")); // совпадает с сырым значением
+    assert (cf_display (l, fields[0]) == "Альт Сервер, Альт Рабочая станция" && cf_display (l, fields[1]) == "216");
+    assert (cf_labels_from_csv (parse_csv (""), fields).get_size () == 0);
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -175,5 +200,6 @@ int main (string[] args) {
     Test.add_func ("/logic/waf", test_waf);
     Test.add_func ("/logic/server-link", test_server_link);
     Test.add_func ("/logic/favourites", test_favourites);
+    Test.add_func ("/logic/csv", test_csv);
     return Test.run ();
 }

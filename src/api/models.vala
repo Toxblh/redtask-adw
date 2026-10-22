@@ -123,6 +123,83 @@ namespace Redmine {
         return "";
     }
 
+    /** Разбор CSV-экспорта Redmine: разделитель «;» или «,», кавычки с удвоением, переводы строк внутри кавычек, BOM. */
+    public GenericArray<GenericArray<string>> parse_csv (string text) {
+        var src = text.has_prefix ("\xEF\xBB\xBF") ? text.substring (3) : text;
+        // разделитель — символ сразу после первой колонки заголовка («#;…» в русской локали, «#,…» в английской)
+        char sep = ';';
+        for (int k = 0; k < src.length; k++) {
+            if (src[k] == ';' || src[k] == ',') { sep = src[k]; break; }
+            if (src[k] == '\n') break;
+        }
+        var rows = new GenericArray<GenericArray<string>> ();
+        var row = new GenericArray<string> ();
+        var cell = new StringBuilder ();
+        bool quoted = false;
+        // байтами: все служебные символы — ASCII, многобайтные UTF-8 проходят как есть
+        for (int i = 0; i < src.length; i++) {
+            var c = src[i];
+            if (quoted && c == '"' && i + 1 < src.length && src[i + 1] == '"') { cell.append_c ('"'); i++; }
+            else if (c == '"') quoted = !quoted;
+            else if (!quoted && c == sep) { row.add (cell.str); cell.truncate (); }
+            else if (!quoted && (c == '\n' || c == '\r')) {
+                if (c == '\r' && i + 1 < src.length && src[i + 1] == '\n') i++;
+                row.add (cell.str); cell.truncate ();
+                rows.add (row); row = new GenericArray<string> ();
+            }
+            else cell.append_c (c);
+        }
+        if (cell.len > 0 || row.length > 0) { row.add (cell.str); rows.add (row); }
+        return rows;
+    }
+
+    /** Сырые значения настраиваемого поля (строка или массив), без пустых. */
+    private string[] cf_raw (Json.Object f) {
+        string[] res = {};
+        var v = f.get_member ("value");
+        if (v == null || v.is_null ()) return res;
+        if (v.get_node_type () == Json.NodeType.ARRAY) {
+            foreach (var e in v.get_array ().get_elements ()) { var x = json_value_display (e); if (x.strip () != "") res += x; }
+        } else { var x = json_value_display (v); if (x.strip () != "") res += x; }
+        return res;
+    }
+
+    /**
+     * Поле, которое REST отдаёт идентификаторами (список «ключ/значение», пользователь, версия): все значения —
+     * только цифры, не длиннее 9. Даты и дробные числа CSV печатает в локальном формате — их не трогаем.
+     */
+    public bool cf_id_like (Json.Object f) {
+        var raw = cf_raw (f);
+        if (raw.length == 0) return false;
+        foreach (var x in raw) if (x.length > 9 || !/^[0-9]+$/.match (x)) return false;
+        return true;
+    }
+
+    /**
+     * Подписи из CSV-экспорта: id поля → текст, только где он отличается от сырого значения.
+     * Колонки идут в порядке запроса, но недоступную сервер пропускает — сопоставляем по имени поля.
+     */
+    public Json.Object cf_labels_from_csv (GenericArray<GenericArray<string>> rows, GenericArray<Json.Object> fields) {
+        var res = new Json.Object ();
+        if (rows.length < 2) return res;
+        var header = rows[0];
+        var line = rows[1];
+        foreach (var f in fields) {
+            int col = -1;
+            for (int k = 1; k < header.length; k++) if (header[k] == jstr (f, "name")) { col = k; break; }
+            if (col < 0 || col >= line.length) continue;
+            var text = line[col].strip ();
+            if (text != "" && text != string.joinv (", ", cf_raw (f))) res.set_string_member (jint (f, "id").to_string (), text);
+        }
+        return res;
+    }
+
+    /** Значение поля для показа: подпись из CSV, если есть, иначе как отдал REST. */
+    public string cf_display (Json.Object? labels, Json.Object cf) {
+        var l = labels != null ? jstr (labels, jint (cf, "id").to_string ()) : "";
+        return l != "" ? l : json_value_display (cf.get_member ("value"));
+    }
+
     // ---- сущности ----
 
     public class Named : Object {

@@ -180,6 +180,9 @@ namespace Redmine {
             try {
                 var fresh = yield s.api.issue (issue_id);
                 if (my != gen) return;
+                // подписи полей лежат в кэше вместе с задачей — годны, пока задачу не меняли
+                if (issue != null && issue.o.has_member ("_cf_labels") && jstr (issue.o, "updated_on") == jstr (fresh.o, "updated_on"))
+                    fresh.o.set_member ("_cf_labels", issue.o.get_member ("_cf_labels").copy ());
                 issue = fresh;
                 s.cache.save ("issue-%d".printf (issue_id), obj_node (fresh.o));
                 render ();
@@ -194,6 +197,16 @@ namespace Redmine {
             load_times.begin (s, my);
             load_names.begin (s, my);
             load_linked.begin (s, my);
+            if (!issue.o.has_member ("_cf_labels")) load_labels.begin (s, my);
+        }
+
+        /** Подписи полей-списков («88» → название) из CSV-экспорта; пустой ответ не запоминаем — мог быть сбоем. */
+        private async void load_labels (Session s, int my) {
+            var labels = yield s.api.custom_field_labels (issue_id, issue.custom_fields);
+            if (my != gen || labels.get_size () == 0) return;
+            issue.o.set_object_member ("_cf_labels", labels);
+            s.cache.save ("issue-%d".printf (issue_id), obj_node (issue.o));
+            render ();
         }
 
         private async void load_perms (Session s, int my) {
@@ -573,8 +586,9 @@ namespace Redmine {
             }
             prop (props, _("Updated"), format_datetime (i.updated_on));
             var blocks = new GenericArray<Json.Object> ();
+            var labels = jobj (i.o, "_cf_labels");
             foreach (var cf in i.custom_fields) {
-                var val = json_value_display (cf.get_member ("value"));
+                var val = cf_display (labels, cf);
                 if (val.strip () == "") continue;
                 // длинное, многострочное или с блочной разметкой — Textile-блоком ниже, как на Android/сайте
                 if (cf.get_member ("value").get_node_type () != Json.NodeType.ARRAY && is_block_value (val)) blocks.add (cf);
@@ -589,7 +603,7 @@ namespace Redmine {
 
             foreach (var cf in blocks) {
                 body.append (heading (jstr (cf, "name")));
-                body.append (rich_card (json_value_display (cf.get_member ("value")).replace ("\r\n", "\n").strip ()));
+                body.append (rich_card (cf_display (labels, cf).replace ("\r\n", "\n").strip ()));
             }
 
             // описание

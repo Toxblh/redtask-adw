@@ -397,6 +397,25 @@ namespace Redmine {
             return p;
         }
 
+        /**
+         * Подписи значений настраиваемых полей, которые REST отдаёт идентификаторами: «88» → «Альт Сервер».
+         * Описания полей не-админу недоступны (/custom_fields.json — 403), зато CSV-экспорт принимает ключ
+         * и печатает значения, как сайт. id поля → текст; сбой — пустой объект (не бросает).
+         */
+        public async Json.Object custom_field_labels (int issue_id, GenericArray<Json.Object> fields) {
+            var ids = new GenericArray<Json.Object> ();
+            foreach (var f in fields) if (cf_id_like (f)) ids.add (f);
+            if (ids.length == 0) return new Json.Object ();
+            var q = new Query ().add ("issue_id", issue_id.to_string ()).add ("status_id", "*").add ("encoding", "UTF-8");
+            foreach (var f in ids) q.add ("c[]", "cf_%d".printf (jint (f, "id")));
+            try {
+                return cf_labels_from_csv (parse_csv (yield exec ("GET", url ("issues.csv", q), null)), ids);
+            } catch (Error e) {
+                debug ("cf labels: %s", e.message);
+                return new Json.Object ();
+            }
+        }
+
         /** Номера всех задач серверного избранного (любой статус), все страницы. */
         public async GenericSet<int> favourite_ids () throws Error {
             var res = new GenericSet<int> (direct_hash, direct_equal);
