@@ -17,5 +17,11 @@ case "$1" in
   test) run_sdk '[ -d build ] || meson setup build --prefix=/app; meson test -C build --print-errorlogs' ;;
   run) shift; run_sdk "ninja -C build >/dev/null && exec ./build/src/redmine-adw $*" ;;
   shell) run_sdk 'exec bash' ;;
+  # tools/dev.sh shot имя ШxВ [VAR=знач…] — PNG окна в build/shots/имя.png (ключ — из ~/.env-redmine)
+  shot) name=$2; size=$3; shift 3; mkdir -p build/shots
+    . ~/.env-redmine
+    extra=""; for kv in "$@"; do extra="$extra --env=$kv"; done
+    DEV_ENV="--env=REDMINE_ADW_DEV_KEY=$REDMINE --env=REDMINE_ADW_DEV_SERVER=https://my.basealt.space --env=REDMINE_ADW_SHOT=$PWD/build/shots/$name.png --env=REDMINE_ADW_SHOT_SIZE=$size $extra" \
+      run_sdk "ninja -C build >/dev/null && exec ./build/src/redmine-adw" ;;
   *) echo "usage: $0 build|test|run|shell"; exit 1 ;;
 esac

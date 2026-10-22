@@ -35,12 +35,12 @@ namespace Redmine {
     public string format_date (string? iso) {
         if (iso == null || iso.length < 10) return iso ?? "";
         var dt = new DateTime.from_iso8601 (iso.substring (0, 10) + "T00:00:00", new TimeZone.local ());
-        return dt == null ? iso : dt.format ("%e %b %Y").strip ();
+        return dt == null ? iso : dt.format ("%-d %b %Y").strip ();
     }
 
     public string format_datetime (string? iso) {
         var dt = local_dt (iso);
-        return dt == null ? (iso ?? "") : dt.format ("%e %b %Y, %H:%M").strip ();
+        return dt == null ? (iso ?? "") : dt.format ("%-d %b %Y, %H:%M").strip ();
     }
 
     /** «сейчас», «5 мин», «3 ч», «2 д», иначе дата. */
@@ -53,7 +53,7 @@ namespace Redmine {
         if (minutes < 60) return _("%d min").printf ((int) minutes);
         if (minutes < 60 * 24) return _("%d h").printf ((int) (minutes / 60));
         if (minutes < 60 * 24 * 14) return _("%d d").printf ((int) (minutes / (60 * 24)));
-        return new DateTime.from_unix_local (ms / 1000).format ("%e %b %Y").strip ();
+        return new DateTime.from_unix_local (ms / 1000).format ("%-d %b %Y").strip ();
     }
 
     /** Дата YYYY-MM-DD в прошлом относительно сегодня (по местному времени). */

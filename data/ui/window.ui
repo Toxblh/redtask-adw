@@ -130,7 +130,7 @@
                                     <property name="child">
                                       <object class="AdwToolbarView">
                                         <child type="top">
-                                          <object class="AdwHeaderBar">
+                                          <object class="AdwHeaderBar" id="list_header">
                                             <child type="start">
                                               <object class="GtkToggleButton" id="sidebar_button">
                                                 <property name="visible">False</property>

@@ -11,7 +11,8 @@ namespace Redmine {
         [GtkChild] private unowned Adw.ViewStack sections;
         [GtkChild] private unowned Adw.WindowTitle section_title;
         [GtkChild] private unowned Adw.NavigationPage sections_page;
-        [GtkChild] private unowned Adw.ViewSwitcherSidebar switcher_sidebar;
+        [GtkChild] private unowned Adw.HeaderBar list_header;
+        private Gtk.Button search_button;
 
         private LoginView? login_view = null;
         private bool built = false;
@@ -35,8 +36,14 @@ namespace Redmine {
                 return false;
             });
 
+            // узко: в нижней панели не больше пяти разделов (HIG) — поиск открывается кнопкой в шапке
+            search_button = new Gtk.Button.from_icon_name ("system-search-symbolic") { tooltip_text = _("Search Issues"), visible = false };
+            search_button.clicked.connect (push_search);
+            list_header.pack_end (search_button);
+            inner.notify["collapsed"].connect (sync_narrow);
+
             ActionEntry[] actions = {
-                { "search", () => current_section ()?.start_search () },
+                { "search", on_search },
                 { "refresh", on_refresh },
                 { "new-issue", () => new_issue (0, 0) },
                 { "back", on_back },
@@ -50,6 +57,33 @@ namespace Redmine {
                 current_section ()?.shown ();
             });
             if (Environment.get_variable ("REDMINE_ADW_SHOT") != null) Shots.schedule (this);
+        }
+
+        private void sync_narrow () {
+            search_button.visible = inner.collapsed;
+            var child = sections.get_child_by_name ("search");
+            if (child == null) return;
+            var page = sections.get_page (child);
+            if (inner.collapsed && sections.visible_child_name == "search") sections.visible_child_name = "mine";
+            page.visible = !inner.collapsed;
+        }
+
+        private void push_search () {
+            var sec = new SearchSection ();
+            var tv = new Adw.ToolbarView ();
+            tv.add_top_bar (new Adw.HeaderBar ());
+            tv.content = sec;
+            var page = new Adw.NavigationPage (tv, _("Search")) { tag = "search" };
+            page.shown.connect (() => sec.shown ());
+            list_nav.push (page);
+        }
+
+        /** Ctrl+F: в списке — поиск по загруженному, в разделе поиска — его поле. */
+        private void on_search () {
+            var sec = current_section ();
+            if (sec is SearchSection || sec is IssueListSection || sec is ProjectsSection) sec.start_search ();
+            else if (inner.collapsed) push_search ();
+            else show_section ("search");
         }
 
         [GtkCallback]
@@ -107,6 +141,7 @@ namespace Redmine {
             add_section (new SearchSection (), "search", _("Search"), "system-search-symbolic");
             add_section (new NotificationsSection (), "notifications", _("Notifications"), "preferences-system-notifications-symbolic");
             sections.visible_child_name = "mine";
+            sync_narrow ();
             issue_nav.replace_with_tags ({ "empty" });
             list_nav.replace_with_tags ({ "sections" });
         }

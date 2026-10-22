@@ -91,6 +91,7 @@ namespace Redmine {
             list.remove_all ();
             more_spinner = null;
             foreach (var i in issues) list.append (new IssueRow (i, kind != ListKind.PROJECT));
+            list.unselect_all ();
             if (issues.length == 0) {
                 state.empty (_("Nothing Here Yet"), "checkbox-checked-symbolic");
             } else state.content ();
