@@ -3,6 +3,7 @@ namespace Redmine {
      * Скриншоты для README/metainfo и визуальной проверки: REDMINE_ADW_SHOT=путь.png — через REDMINE_ADW_SHOT_DELAY мс
      * окно рендерится само в PNG (Wayland не даёт снимать чужие окна) и приложение выходит.
      * REDMINE_ADW_SHOT_SIZE=ШxВ, REDMINE_ADW_SHOT_ISSUE=номер — открыть задачу, REDMINE_ADW_SHOT_SECTION=имя раздела.
+     * REDMINE_ADW_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
      */
     namespace Shots {
         public void schedule (Window w) {
@@ -41,6 +42,9 @@ namespace Redmine {
             Timeout.add (delay, () => {
                 debug ("shot: frames in the last second: %d", ticks);
                 save (w, Environment.get_variable ("REDMINE_ADW_SHOT"));
+                var page = w.visible_issue ();
+                var clamp = page != null && Environment.get_variable ("REDMINE_ADW_SHOT_FULL") != null ? find_clamp (page) : null;
+                if (clamp != null) save (clamp, Environment.get_variable ("REDMINE_ADW_SHOT") + ".full.png");
                 var d = w.visible_dialog;
                 if (d != null) {
                     debug ("shot: dialog %s %dx%d mapped=%s", d.get_type ().name (), d.get_width (), d.get_height (), d.get_mapped ().to_string ());
@@ -49,6 +53,15 @@ namespace Redmine {
                 w.application.quit ();
                 return Source.REMOVE;
             });
+        }
+
+        private Gtk.Widget? find_clamp (Gtk.Widget w) {
+            if (w is Adw.Clamp && w.parent is Gtk.Viewport && w.get_mapped ()) return w;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_clamp (c);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         public void save (Gtk.Widget w, string path) {

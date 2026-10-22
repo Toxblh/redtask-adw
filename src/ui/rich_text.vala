@@ -7,6 +7,7 @@ namespace Redmine {
     public class RichText : Gtk.Box {
         private string text;
         private GenericArray<Json.Object> atts;
+        private int quote_depth = 0;
         /** Ссылка #note-N на комментарий этой же задачи. */
         public signal void note_activated (int note);
 
@@ -97,8 +98,11 @@ namespace Redmine {
                 case Textile.BlockKind.QUOTE:
                     var q = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
                     q.add_css_class ("rich-quote");
-                    q.add_css_class ("dim-label");
+                    // приглушаем один раз: вложенный dim-label множит прозрачность, и вложенная цитата почти не видна
+                    if (quote_depth == 0) q.add_css_class ("dim-label");
+                    quote_depth++;
                     build (q, b.lines[0].children, depth + 1);
+                    quote_depth--;
                     return q;
                 case Textile.BlockKind.COLLAPSE:
                     var l0 = b.lines[0];
@@ -120,17 +124,19 @@ namespace Redmine {
         private Gtk.Widget table (Textile.Block b) {
             var grid = new Gtk.Grid () { column_spacing = 0, row_spacing = 0 };
             grid.add_css_class ("rich-table");
+            Textile.layout_table (b.lines);
             int r = 0;
             foreach (var l in b.lines) {
-                int col = 0;
                 foreach (var c in l.cells) {
                     var m = Textile.inline_markup (c.text, lookup);
                     var cell = label (c.header ? "<b>" + m + "</b>" : m);
                     cell.selectable = false;
                     cell.hexpand = false;
+                    cell.xalign = c.xalign;
                     cell.max_width_chars = 40;
-                    grid.attach (cell, col, r, c.span, 1);
-                    col += c.span;
+                    // без минимальной ширины прокрутка меряет высоту по ширине в букву — таблица вытягивается вниз пустотой
+                    cell.width_chars = int.min (c.text.char_count (), 40);
+                    grid.attach (cell, c.col, r, c.span, c.rowspan);
                 }
                 r++;
             }

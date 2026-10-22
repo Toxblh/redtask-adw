@@ -21,7 +21,7 @@ namespace Textile {
     private Regex? _sup; private Regex? _sub; private Regex? _code; private Regex? _macro; private Regex? _img;
     private Regex? _hr; private Regex? _heading; private Regex? _list; private Regex? _bq; private Regex? _collapse;
     private Regex? _toc; private Regex? _entity; private Regex? _preopen; private Regex? _codetag; private Regex? _cellmod;
-    private Regex? _cellspan;
+    private Regex? _cellspan; private Regex? _rowspan; private Regex? _email; private Regex? _fnref; private Regex? _fn;
 
     private Regex re (string p, RegexCompileFlags f = 0) {
         try {
@@ -40,8 +40,13 @@ namespace Textile {
         _userref = re ("(?<![" + W + "/#:.@-])user(?:#(\\d+)|:(" + LOGIN + "))(?![" + W + "])");
         _tlink = re ("\"([^\"\\n]+)\":((?:https?|ftp)://[^\\s<>\"']+|mailto:[^\\s<>\"']+|/[^\\s<>\"']*)");
         _url = re ("https?://[^\\s<>\"']+");
+        _email = re ("(?<![" + W + ".+\\-@])[A-Za-z0-9_.+\\-]+@[A-Za-z0-9\\-]+(?:\\.[A-Za-z0-9\\-]+)*\\.[A-Za-z]{2,}(?![" + W + "@])");
+        // ссылка на сноску: «текст[1]» — сразу за непробелом; сама сноска — строка «fn1. текст»
+        _fnref = re ("(?<=[^\\s\\[])\\[(\\d{1,3})\\]");
+        _fn = re ("^fn(\\d{1,3})\\.\\s+(.*)");
         _bold = re ("(?<![" + W + "*])(\\*\\*?)(?![\\s*])([^*\\n]+?)(?<!\\s)\\1(?![" + W + "*])");
-        _italic = re ("(?<![" + W + "])_(?!\\s)([^_\\n]+?)(?<!\\s)_(?![" + W + "])");
+        // _курсив_ и __курсив__ (у RedCloth это <i>) — как *жирный* и **жирный**
+        _italic = re ("(?<![" + W + "])(__?)(?![\\s_])([^_\\n]+?)(?<!\\s)\\1(?![" + W + "])");
         // дефис внутри зачёркнутого — только между буквами: «well-known», «--force», «2020-01-01» как есть
         _strike = re ("(?<![" + W + "-])-(?![\\s-])([^-\\n]+?(?:(?<=[" + W + "])-(?=[" + W + "])[^-\\n]+?){0,20}?)(?<!\\s)-(?![" + W + "-])");
         _under = re ("(?<![" + W + "+])\\+(?![\\s+])([^+\\n]+?)(?<!\\s)\\+(?![" + W + "+])");
@@ -61,11 +66,12 @@ namespace Textile {
         _bq = re ("^bq\\.\\s+(.*)");
         _collapse = re ("^\\{\\{collapse(?:\\(([^)]*)\\))?\\s*$");
         _toc = re ("^\\s*\\{\\{[<>]?toc\\}\\}\\s*$");
-        _entity = re ("&(amp|lt|gt|quot|apos|nbsp|#\\d{1,7}|#[xX][0-9a-fA-F]{1,6});");
+        _entity = re ("&([a-zA-Z]{2,8}|#\\d{1,7}|#[xX][0-9a-fA-F]{1,6});");
         _preopen = re ("<pre(?:\\s[^<>]*)?>");
         _codetag = re ("</?code(?:\\s[^<>]*)?>");
         _cellmod = re ("""^((?:_|\\\d+|/\d+|[<>=^~]|\{[^}]*\}){1,8})\.\s*(.*)""", RegexCompileFlags.DOTALL);
         _cellspan = re ("""\\(\d+)""");
+        _rowspan = re ("""/(\d+)""");
     }
 
     public Regex mention_re () { init (); return _mention; }
@@ -113,6 +119,7 @@ namespace Textile {
                     case "apos": v = "'"; break;
                     case "nbsp": v = "\u00A0"; break;
                     default:
+                        if (e[0] != '#') { v = named_entity (e); break; }
                         uint64 cp = 0;
                         bool ok = (e[1] == 'x' || e[1] == 'X')
                             ? uint64.try_parse (e.substring (2), out cp, null, 16)
@@ -128,15 +135,54 @@ namespace Textile {
         }
     }
 
+    /** Частые именованные сущности HTML; прочие остаются текстом как написаны. */
+    private string? named_entity (string e) {
+        switch (e) {
+            case "copy": return "©"; case "reg": return "®"; case "trade": return "™"; case "deg": return "°";
+            case "mdash": return "—"; case "ndash": return "–"; case "minus": return "−"; case "hellip": return "…";
+            case "laquo": return "«"; case "raquo": return "»"; case "ldquo": return "“"; case "rdquo": return "”";
+            case "bdquo": return "„"; case "lsquo": return "‘"; case "rsquo": return "’"; case "sbquo": return "‚";
+            case "times": return "×"; case "divide": return "÷"; case "plusmn": return "±"; case "middot": return "·";
+            case "bull": return "•"; case "sect": return "§"; case "para": return "¶"; case "euro": return "€";
+            case "pound": return "£"; case "yen": return "¥"; case "cent": return "¢"; case "shy": return "\u00AD";
+            case "larr": return "←"; case "rarr": return "→"; case "uarr": return "↑"; case "darr": return "↓";
+            case "harr": return "↔"; case "rArr": return "⇒"; case "lArr": return "⇐"; case "hArr": return "⇔";
+            case "le": return "≤"; case "ge": return "≥"; case "ne": return "≠"; case "asymp": return "≈";
+            case "infin": return "∞"; case "frac12": return "½"; case "frac14": return "¼"; case "frac34": return "¾";
+            case "sup2": return "²"; case "sup3": return "³"; case "micro": return "µ"; case "check": return "✓";
+            default: return null;
+        }
+    }
+
     // ---- строки-блоки ----
 
-    public enum Kind { PLAIN, CODE, RULE, QUOTE, COLLAPSE, HEADING, ITEM, ROW, IMAGE }
+    public enum Kind { PLAIN, CODE, RULE, QUOTE, COLLAPSE, HEADING, ITEM, ROW, IMAGE, FOOTNOTE }
 
     public class Cell : Object {
         public string text;
         public bool header;
         public int span;
+        public int rowspan = 1;
+        /** Выравнивание «<.» «=.» «>.»: 0 — влево, 0.5 — по центру, 1 — вправо. */
+        public float xalign = 0;
+        /** Колонка в сетке с учётом colspan/rowspan выше — ставит layout_table (). */
+        public int col = 0;
         public Cell (string text, bool header = false, int span = 1) { this.text = text; this.header = header; this.span = span; }
+    }
+
+    /** Колонки ячеек: ячейка с /N. занимает свою колонку ещё N-1 строк ниже, их ячейки сдвигаются вправо. */
+    public void layout_table (GenericArray<Line> rows) {
+        var busy = new int[MAX_CELLS * 20 + 20]; // сколько ещё строк колонка занята сверху
+        foreach (var l in rows) {
+            int col = 0;
+            foreach (var c in l.cells) {
+                while (col < busy.length && busy[col] > 0) col++;
+                c.col = col;
+                for (int k = col; k < int.min (col + c.span, busy.length); k++) busy[k] = c.rowspan;
+                col += c.span;
+            }
+            for (int k = 0; k < busy.length; k++) if (busy[k] > 0) busy[k]--;
+        }
     }
 
     public class Line : Object {
@@ -161,12 +207,22 @@ namespace Textile {
         foreach (var raw in t.split ("|", MAX_CELLS)) {
             var r = raw.strip ();
             MatchInfo mi;
-            if (!_cellmod.match (r, 0, out mi)) { res.add (new Cell (r)); continue; }
+            // модификаторы — сразу за «|»: «| {color:red}. x» RedCloth оставляет текстом
+            var head = raw.chomp (); // MatchInfo держит ссылку на строку — временная не годится
+            if (!_cellmod.match (head, 0, out mi)) { res.add (new Cell (r)); continue; }
             var mods = mi.fetch (1);
             int span = 1;
             MatchInfo sm;
             if (_cellspan.match (mods, 0, out sm)) span = int.parse (sm.fetch (1)).clamp (1, 20);
-            res.add (new Cell (mi.fetch (2).strip (), mods.has_prefix ("_") || mods.has_suffix ("_"), span));
+            var c = new Cell (mi.fetch (2).strip (), mods.has_prefix ("_") || mods.has_suffix ("_"), span);
+            if (_rowspan.match (mods, 0, out sm)) c.rowspan = int.parse (sm.fetch (1)).clamp (1, 20);
+            // «{…}» вырезаем, чтобы «>» и «<» внутри стиля не сошли за выравнивание
+            var m = Regex.split_simple ("\\{[^}]*\\}", mods);
+            var bare = string.joinv ("", m);
+            if (bare.contains ("<>")) c.xalign = 0;
+            else if (bare.contains ("=")) c.xalign = 0.5f;
+            else if (bare.contains (">")) c.xalign = 1;
+            res.add (c);
         }
         return res;
     }
@@ -215,6 +271,11 @@ namespace Textile {
                 for (int k = 0; k < 8; k++) counters[k] = 0;
                 var l = new Line (Kind.HEADING, mi.fetch (2).strip ());
                 l.level = int.parse (mi.fetch (1));
+                return l;
+            }
+            if (_fn.match (line, 0, out mi)) {
+                var l = new Line (Kind.FOOTNOTE, mi.fetch (2));
+                l.number = int.parse (mi.fetch (1));
                 return l;
             }
             // сервер — Textile: «# пункт» это нумерованный список, а не markdown-заголовок
@@ -387,7 +448,7 @@ namespace Textile {
 
     public BlockKind kind_of (Line l) {
         switch (l.kind) {
-            case Kind.PLAIN: case Kind.HEADING: return BlockKind.TEXT;
+            case Kind.PLAIN: case Kind.HEADING: case Kind.FOOTNOTE: return BlockKind.TEXT;
             case Kind.ROW: return BlockKind.TABLE;
             case Kind.CODE: return BlockKind.CODE;
             case Kind.ITEM: return BlockKind.LIST;
@@ -545,6 +606,14 @@ namespace Textile {
                 spans.add (new Span (s, e, "code", body));
             }
         } while (next (mi));
+        if (_email.match (line, 0, out mi)) do {
+            mi.fetch_pos (0, out s, out e);
+            if (free (spans, s)) spans.add (new Span (s, e, "url", mi.fetch (0), "mailto:" + mi.fetch (0)));
+        } while (next (mi));
+        if (_fnref.match (line, 0, out mi)) do {
+            mi.fetch_pos (0, out s, out e);
+            if (free (spans, s)) spans.add (new Span (s, e, "fnref", mi.fetch (1)));
+        } while (next (mi));
         if (_url.match (line, 0, out mi)) do {
             mi.fetch_pos (0, out s, out e);
             var u = trim_url (mi.fetch (0));
@@ -565,7 +634,7 @@ namespace Textile {
             if (free (spans, s)) spans.add (new Span (s, e, "macro", mi.fetch (1)));
         } while (next (mi));
         add_style (spans, _bold, line, 2, "b");
-        add_style (spans, _italic, line, 1, "i");
+        add_style (spans, _italic, line, 2, "i");
         add_style (spans, _strike, line, 1, "s");
         add_style (spans, _under, line, 1, "u");
         add_style (spans, _cite, line, 1, "i");
@@ -585,6 +654,9 @@ namespace Textile {
                     break;
                 case "url":
                     sb.append ("<a href=\"" + Markup.escape_text (unraw (sp.payload)) + "\">" + esc (sp.text) + "</a>");
+                    break;
+                case "fnref":
+                    sb.append ("<sup>" + esc (sp.text) + "</sup>");
                     break;
                 case "issue":
                     sb.append ("<a href=\"issue:" + sp.payload + "\">" + esc (sp.text) + "</a>");
@@ -630,7 +702,9 @@ namespace Textile {
         var sb = new StringBuilder ();
         for (int i = 0; i < lines.length; i++) {
             var l = lines[i];
-            if (l.kind == Kind.HEADING) {
+            if (l.kind == Kind.FOOTNOTE) {
+                sb.append ("<sup>%d</sup> ".printf (l.number) + inline_markup (l.text, lookup));
+            } else if (l.kind == Kind.HEADING) {
                 var size = l.level == 1 ? "x-large" : (l.level == 2 ? "large" : "medium");
                 sb.append ("<span size=\"" + size + "\" weight=\"bold\">" + inline_markup (l.text, lookup) + "</span>");
             } else {

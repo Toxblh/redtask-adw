@@ -28,7 +28,9 @@ namespace Redmine {
         public static App get () { return (App) GLib.Application.get_default (); }
 
         public App () {
-            Object (application_id: Config.APP_ID, flags: ApplicationFlags.HANDLES_OPEN);
+            // снимок (REDMINE_ADW_SHOT) — отдельным процессом, даже когда приложение уже запущено
+            Object (application_id: Config.APP_ID, flags: ApplicationFlags.HANDLES_OPEN
+                | (Environment.get_variable ("REDMINE_ADW_SHOT") != null ? ApplicationFlags.NON_UNIQUE : 0));
         }
 
         construct {

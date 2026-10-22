@@ -16,6 +16,12 @@ void test_blocks () {
     // RedCloth не требует пробела после «.»: так пишут шаблоны полей на сервере
     var hc = parse_cells ("|_.Статья |_.б/н |");
     assert (hc[0].header && hc[0].text == "Статья" && hc[1].header && hc[1].text == "б/н");
+    // rowspan сдвигает ячейки следующей строки; выравнивание; модификатор после пробела — текст
+    var t = group (parse ("|/2. r | b | c |\n| d | e |\n|<. л |=. ц |>. п |\n| {color:red}. x |\\2. две |"))[0].lines;
+    layout_table (t);
+    assert (t[0].cells[0].rowspan == 2 && t[1].cells[0].col == 1 && t[1].cells[1].col == 2);
+    assert (t[2].cells[0].col == 0 && t[2].cells[1].xalign == 0.5f && t[2].cells[2].xalign == 1);
+    assert (t[3].cells[0].text == "{color:red}. x" && t[3].cells[1].span == 2 && t[3].cells[1].text == "две");
     assert (kinds[4] == BlockKind.CODE && blocks[4].lines.length == 2 && blocks[4].lines[1].text == "  строка");
     assert (kinds[5] == BlockKind.RULE);
     assert (kinds[6] == BlockKind.IMAGE && blocks[6].lines[0].text == "img.png");
@@ -41,7 +47,16 @@ void test_inline () {
     assert (inline_markup ("*жирный* и _курсив_") == "<b>жирный</b> и <i>курсив</i>");
     // не разметка: арифметика, пути, почта
     assert (inline_markup ("2 * 3 * 4") == "2 * 3 * 4");
-    assert (inline_markup ("a@b.com or c@d.com") == "a@b.com or c@d.com");
+    // почта — не @код@, а ссылка mailto, как у сервера
+    assert (inline_markup ("a@b.com or c@d.com") == "<a href=\"mailto:a@b.com\">a@b.com</a> or <a href=\"mailto:c@d.com\">c@d.com</a>");
+    assert (inline_markup ("__курсив__ и **жирный**") == "<i>курсив</i> и <b>жирный</b>");
+    assert (inline_markup ("snake_case_name") == "snake_case_name");
+    // сноски: «текст[1]» → верхний индекс, «[1]» после пробела — как есть
+    assert (inline_markup ("текст[1] и [2]") == "текст<sup>1</sup> и [2]");
+    var fl = parse ("fn1. Сноска");
+    assert (fl[0].kind == Kind.FOOTNOTE && fl[0].number == 1 && text_markup (fl) == "<sup>1</sup> Сноска");
+    // именованные сущности
+    assert (inline_markup (decode_entities ("&copy; &mdash; &laquo;x&raquo; &trade; &bogus;")) == "© — «x» ™ &amp;bogus;");
     assert (inline_markup ("well-known --force") == "well-known --force");
     assert (inline_markup ("см. #123") == "см. <a href=\"issue:123\">#123</a>");
     assert (inline_markup ("#123#note-5") == "<a href=\"issue:123:5\">#123#note-5</a>");
