@@ -150,7 +150,6 @@ namespace Redmine {
                     if (editor.text.strip () != "") drafts[issue.id] = editor.text; else drafts.remove (issue.id);
                 }
             });
-            focus_widget = editor;
             Idle.add (() => { editor.focus_text (); return Source.REMOVE; });
         }
 

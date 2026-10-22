@@ -29,7 +29,7 @@ namespace Redmine {
             this.kind = kind;
             this.project_id = project_id;
 
-            filter = new Adw.ToggleGroup () { margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6, homogeneous = true };
+            filter = new Adw.ToggleGroup () { margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
             filter.add (new Adw.Toggle () { name = "open", label = _("Open") });
             filter.add (new Adw.Toggle () { name = "closed", label = _("Closed") });
             filter.add (new Adw.Toggle () { name = "*", label = _("All") });

@@ -28,10 +28,6 @@ namespace Redmine {
             group_filter = new Gtk.DropDown.from_strings (labels) { tooltip_text = _("Show"), valign = Gtk.Align.CENTER };
             group_filter.notify["selected"].connect (render);
             top.append (group_filter);
-            var check = new Gtk.Button.from_icon_name ("view-refresh-symbolic") { tooltip_text = _("Check Now"), valign = Gtk.Align.CENTER };
-            check.add_css_class ("flat");
-            check.clicked.connect (() => refresh ());
-            top.append (check);
             box.append (top);
 
             list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.NONE };
@@ -176,15 +172,21 @@ namespace Redmine {
             var m = new Menu ();
             m.append (p.muted ("muted-issues").contains (issue_id) ? _("Notify About Issue") : _("Mute Issue"), "n.mute-issue");
             if (project_id != 0) m.append (p.muted ("muted-projects").contains (project_id) ? _("Notify About Project") : _("Mute Project"), "n.mute-project");
-            var pop = new Gtk.PopoverMenu.from_model (m) { has_arrow = true };
-            pop.set_parent (row);
+            // меню создаётся по требованию и отцепляется при закрытии: висящий дочерний попап ряд не отпускает
             var click = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
-            click.pressed.connect ((n, x, y) => { pop.pointing_to = { (int) x, (int) y, 1, 1 }; pop.popup (); });
+            click.pressed.connect ((n, x, y) => popup_menu (row, m, x, y));
             row.add_controller (click);
             var lp = new Gtk.GestureLongPress () { touch_only = true };
-            lp.pressed.connect ((x, y) => { pop.pointing_to = { (int) x, (int) y, 1, 1 }; pop.popup (); });
+            lp.pressed.connect ((x, y) => popup_menu (row, m, x, y));
             row.add_controller (lp);
             return row;
+        }
+
+        private void popup_menu (Gtk.Widget row, MenuModel m, double x, double y) {
+            var pop = new Gtk.PopoverMenu.from_model (m) { has_arrow = true, pointing_to = { (int) x, (int) y, 1, 1 } };
+            pop.set_parent (row);
+            pop.closed.connect (() => Idle.add (() => { pop.unparent (); return Source.REMOVE; }));
+            pop.popup ();
         }
 
         private Gtk.Widget unread_dot (bool on) {

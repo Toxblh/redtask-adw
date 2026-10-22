@@ -6,6 +6,8 @@ namespace Redmine {
      */
     namespace Shots {
         public void schedule (Window w) {
+            // мигающий курсор в поле ввода держит окно в перерисовке — снимок выходит пустым
+            Gtk.Settings.get_default ().gtk_cursor_blink = false;
             var size = Environment.get_variable ("REDMINE_ADW_SHOT_SIZE") ?? "1200x760";
             var wh = size.split ("x");
             w.set_default_size (int.parse (wh[0]), int.parse (wh[1]));
@@ -21,18 +23,36 @@ namespace Redmine {
             var action = Environment.get_variable ("REDMINE_ADW_SHOT_ACTION");
             if (action != null) Timeout.add (delay * 3 / 4, () => {
                 var page = w.visible_issue ();
-                if (action.has_prefix ("issue.") && page != null) page.activate_action (action, null);
+                if (action.has_prefix ("issue.") && page != null) {
+                    if (!page.activate_action (action, null)) warning ("shot: action %s not found", action);
+                }
+                else if (action.has_prefix ("app.")) w.application.activate_action (action.substring (4), null);
+                if (Environment.get_variable ("REDMINE_ADW_SHOT_CLOSE") != null) Timeout.add (2000, () => {
+                    debug ("shot: closing dialog %s", (w.visible_dialog != null).to_string ());
+                    w.visible_dialog?.force_close ();
+                    return Source.REMOVE;
+                });
                 else w.activate_action (action, null);
                 return Source.REMOVE;
             });
+            int ticks = 0;
+            w.add_tick_callback ((wd, clock) => { ticks++; return Source.CONTINUE; });
+            Timeout.add (delay - 1000, () => { ticks = 0; return Source.REMOVE; });
             Timeout.add (delay, () => {
+                debug ("shot: frames in the last second: %d", ticks);
                 save (w, Environment.get_variable ("REDMINE_ADW_SHOT"));
+                var d = w.visible_dialog;
+                if (d != null) {
+                    debug ("shot: dialog %s %dx%d mapped=%s", d.get_type ().name (), d.get_width (), d.get_height (), d.get_mapped ().to_string ());
+                    save (d, Environment.get_variable ("REDMINE_ADW_SHOT") + ".dialog.png");
+                }
                 w.application.quit ();
                 return Source.REMOVE;
             });
         }
 
         public void save (Gtk.Widget w, string path) {
+            debug ("shot: %s %dx%d mapped=%s toplevels=%u", w.get_type ().name (), w.get_width (), w.get_height (), w.get_mapped ().to_string (), Gtk.Window.get_toplevels ().get_n_items ());
             var paintable = new Gtk.WidgetPaintable (w);
             var snap = new Gtk.Snapshot ();
             paintable.snapshot (snap, w.get_width (), w.get_height ());

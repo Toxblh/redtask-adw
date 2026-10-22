@@ -247,7 +247,8 @@ namespace Redmine {
             if (jbool (roles, "admin")) { res.add ("*"); return res; }
             var rm = jobj (roles, "roles");
             var key = project_id.to_string ();
-            if (rm == null || !rm.has_member (key)) return res; // не участник: прав нет (кроме публичных — не знаем)
+            // не участник (права «не участника» и публичных проектов REST не отдаёт): неизвестно — вызывающий остаётся оптимистом
+            if (rm == null || !rm.has_member (key)) return null;
             var ids = rm.get_array_member (key);
             for (uint i = 0; i < ids.get_length (); i++) {
                 var rid = (int) ids.get_int_element (i);
