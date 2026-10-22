@@ -58,3 +58,8 @@ button.person-link {
   padding: 4px 6px;
   margin: -4px -6px;
 }
+/* Текст комментария — TextView без своего фона: выглядит как подписи вокруг. */
+textview.rich-flow,
+textview.rich-flow > text {
+  background: none;
+}

@@ -487,6 +487,87 @@ namespace Textile {
         return res;
     }
 
+    /** Блок течёт в общий TextView с соседями (выделение идёт сквозь): текст, список, код, линия и цитата только из них. */
+    public bool is_flow (Block b) {
+        switch (b.kind) {
+            case BlockKind.TEXT: case BlockKind.LIST: case BlockKind.CODE: case BlockKind.RULE: return true;
+            case BlockKind.QUOTE:
+                foreach (var c in group (b.lines[0].children)) if (!is_flow (c)) return false;
+                return true;
+            default: return false;
+        }
+    }
+
+    /** Отступ перед блоком: абзац — 10, вокруг «коробок» (код, цитата, collapse, линия) — 6, иначе вплотную. */
+    public int gap_before (Block? prev, Block b) {
+        if (prev == null) return 0;
+        if (b.gap) return 10;
+        return boxed (b) || boxed (prev) ? 6 : 0;
+    }
+
+    private bool boxed (Block b) {
+        return b.kind == BlockKind.CODE || b.kind == BlockKind.QUOTE || b.kind == BlockKind.COLLAPSE || b.kind == BlockKind.RULE;
+    }
+
+    /** Кусок текста из markup с открытыми над ним тегами: b, i, s, u, sup, sub, code, macro, h1..h3, link. */
+    public class Run : Object {
+        public string text;
+        public string[] tags;
+        public string? href;
+        public Run (string text, string[] tags, string? href) { this.text = text; this.tags = tags; this.href = href; }
+    }
+
+    /** Наш же Pango markup (inline_markup / text_markup) → куски для GtkTextBuffer: там нет <a>, ссылки — свои. */
+    public GenericArray<Run> markup_runs (string markup) {
+        var p = new RunParser ();
+        MarkupParser mp = { p.start, p.end, p.text, null, null };
+        var ctx = new MarkupParseContext (mp, 0, p, null);
+        try {
+            ctx.parse ("<m>" + markup + "</m>", -1);
+            ctx.end_parse ();
+        } catch (MarkupError e) {
+            warning ("markup_runs: %s", e.message);
+        }
+        return p.runs;
+    }
+
+    private class RunParser {
+        public GenericArray<Run> runs = new GenericArray<Run> ();
+        private string[] stack = {};
+        private string?[] hrefs = {};
+
+        public void start (MarkupParseContext c, string name, string[] keys, string[] vals) throws MarkupError {
+            string tag = name;
+            string? href = null;
+            for (int i = 0; i < keys.length; i++) {
+                if (keys[i] == "href") href = vals[i];
+                if (keys[i] == "font_family") tag = "code";
+                else if (keys[i] == "alpha") tag = "macro";
+                else if (keys[i] == "size" && tag != "macro") tag = vals[i] == "x-large" ? "h1" : (vals[i] == "large" ? "h2" : "h3");
+            }
+            if (name == "a") tag = "link";
+            stack += tag;
+            hrefs += href;
+        }
+
+        public void end (MarkupParseContext c, string name) throws MarkupError {
+            stack.resize (stack.length - 1);
+            hrefs.resize (hrefs.length - 1);
+        }
+
+        public void text (MarkupParseContext c, string t, size_t len) throws MarkupError {
+            if (len == 0) return;
+            string[] tags = {};
+            string? href = null;
+            // корневой <m> не тег
+            for (int i = 1; i < stack.length; i++) {
+                if (!(stack[i] in tags)) tags += stack[i];
+                if (hrefs[i] != null) href = hrefs[i];
+            }
+            runs.add (new Run (t.substring (0, (long) len), tags, href));
+        }
+    }
+
     // ---- инлайн → Pango markup ----
 
     /** login (в нижнем регистре) → «id|Имя» для @упоминаний; неизвестные остаются текстом. */

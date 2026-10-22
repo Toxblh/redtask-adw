@@ -5,6 +5,7 @@ namespace Redmine {
      * REDMINE_ADW_SHOT_SIZE=ШxВ, REDMINE_ADW_SHOT_ISSUE=номер — открыть задачу, REDMINE_ADW_SHOT_SECTION=имя раздела.
      * REDMINE_ADW_SHOT_PERSON=id — открыть карточку человека.
      * REDMINE_ADW_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
+     * REDMINE_ADW_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      */
     namespace Shots {
         public void schedule (Window w) {
@@ -43,6 +44,11 @@ namespace Redmine {
             int ticks = 0;
             w.add_tick_callback ((wd, clock) => { ticks++; return Source.CONTINUE; });
             Timeout.add (delay - 1000, () => { ticks = 0; return Source.REMOVE; });
+            if (Environment.get_variable ("REDMINE_ADW_SHOT_COPY") != null) Timeout.add (delay - 1500, () => {
+                var page = w.visible_issue ();
+                if (page != null) copy_all.begin (page);
+                return Source.REMOVE;
+            });
             Timeout.add (delay, () => {
                 debug ("shot: frames in the last second: %d", ticks);
                 save (w, Environment.get_variable ("REDMINE_ADW_SHOT"));
@@ -57,6 +63,26 @@ namespace Redmine {
                 w.application.quit ();
                 return Source.REMOVE;
             });
+        }
+
+        private async void copy_all (Gtk.Widget page) {
+            var views = new GenericArray<Gtk.TextView> ();
+            collect (page, views);
+            foreach (var v in views) {
+                if (!v.get_mapped ()) continue;
+                // как пользователь: Ctrl+A, Ctrl+C — сигналами самого TextView
+                v.select_all (true);
+                v.copy_clipboard ();
+                try {
+                    print ("=== copy %d chars ===\n%s\n", v.buffer.get_char_count (), yield v.get_clipboard ().read_text_async (null));
+                } catch (Error e) { warning ("copy: %s", e.message); }
+                v.select_all (false);
+            }
+        }
+
+        private void collect (Gtk.Widget w, GenericArray<Gtk.TextView> res) {
+            if (w is FlowView) { res.add ((Gtk.TextView) w); return; }
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) collect (c, res);
         }
 
         private Gtk.Widget? find_clamp (Gtk.Widget w) {

@@ -90,6 +90,44 @@ void test_preview () {
     assert (preview ("bq. *важно* !img.png! \"тут\":http://x") == "важно img.png тут");
 }
 
+/* Текст комментария в один TextView: какие блоки текут вместе, интервалы и куски буфера с тегами и ссылками. */
+void test_flow () {
+    var bs = group (parse ("абзац\n\n* пункт\n<pre>код</pre>\n---\nbq. цитата\n\n|a|b|\n\n!x.png!\n\n> текст\n> |t|\n\n{{collapse(x)\nвнутри\n}}"));
+    BlockKind[] k = {};
+    bool[] f = {};
+    foreach (var b in bs) { k += b.kind; f += is_flow (b); }
+    assert (k[0] == BlockKind.TEXT && f[0]);
+    assert (k[1] == BlockKind.LIST && f[1]);
+    assert (k[2] == BlockKind.CODE && f[2]);
+    assert (k[3] == BlockKind.RULE && f[3]);
+    assert (k[4] == BlockKind.QUOTE && f[4]);   // цитата из текста — в общий поток
+    assert (k[5] == BlockKind.TABLE && !f[5]);
+    assert (k[6] == BlockKind.IMAGE && !f[6]);
+    assert (k[7] == BlockKind.QUOTE && !f[7]);  // с таблицей внутри — отдельным виджетом
+    assert (k[8] == BlockKind.COLLAPSE && !f[8]);
+    // интервалы: абзац 10, рядом с кодом/цитатой/линией 6, иначе вплотную
+    assert (gap_before (null, bs[0]) == 0 && gap_before (bs[0], bs[1]) == 10);
+    assert (gap_before (bs[1], bs[2]) == 6 && gap_before (bs[2], bs[3]) == 6);
+    var tt = group (parse ("a\n* b"));
+    assert (gap_before (tt[0], tt[1]) == 0);
+
+    // markup → куски: теги стопкой, ссылка внутри жирного, спецсимволы как есть
+    var r = markup_runs (inline_markup ("x *жирный \"ссылка\":http://e.org и* @код@ a & <b>"));
+    var sb = new StringBuilder ();
+    foreach (var x in r) sb.append (x.text);
+    assert (sb.str == "x жирный ссылка и код a & <b>");
+    Run? link = null;
+    foreach (var x in r) if (x.text == "ссылка") link = x;
+    assert (link != null && link.href == "http://e.org" && "b" in link.tags && "link" in link.tags);
+    foreach (var x in r) if (x.text == "код") assert (x.tags.length == 1 && x.tags[0] == "code");
+    var h = markup_runs (text_markup (parse ("h1. Big\nh4. small\n{{hello}}")));
+    assert (h[0].text == "Big" && h[0].tags[0] == "h1");
+    assert (h[2].text == "small" && h[2].tags[0] == "h3");
+    assert (h[4].text == "hello" && h[4].tags[0] == "macro");
+    var u = markup_runs (inline_markup ("#5 и @Ivan", (l) => l == "ivan" ? "7|Иван" : null));
+    assert (u[0].href == "issue:5" && u[2].href == "user:7" && u[2].text == "@Иван");
+}
+
 int main (string[] args) {
     Test.init (ref args);
     Test.add_func ("/textile/blocks", test_blocks);
@@ -97,5 +135,6 @@ int main (string[] args) {
     Test.add_func ("/textile/inline", test_inline);
     Test.add_func ("/textile/mentions", test_mentions);
     Test.add_func ("/textile/preview", test_preview);
+    Test.add_func ("/textile/flow", test_flow);
     return Test.run ();
 }
