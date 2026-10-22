@@ -32,6 +32,8 @@ void test_status_kind () {
     assert (due_delta ("2026-10-25", today) == _("%d d").printf (3));
     assert (due_delta ("2026-10-20", today) == _("%d d").printf (-2));
     assert (due_delta ("", today) == null);
+    assert (!format_date_short ("2026-10-22", today).contains ("2026") && !format_date_short ("2026-10-22", today).has_suffix ("."));
+    assert (format_date_short ("2025-10-22", today) == format_date ("2025-10-22"));
 }
 
 Json.Object journal (string json) {

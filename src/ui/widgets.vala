@@ -104,7 +104,7 @@ namespace Redmine {
             if (i.due_date != "") {
                 var overdue = is_overdue (i.due_date) && !closed;
                 var delta = closed ? null : due_delta (i.due_date);
-                meta.append (icon_text ("x-office-calendar-symbolic", format_date (i.due_date) + (delta != null ? " · " + delta : ""), overdue ? "error" : "dim-label"));
+                meta.append (icon_text ("x-office-calendar-symbolic", format_date_short (i.due_date) + (delta != null ? " · " + delta : ""), overdue ? "error" : "dim-label"));
             }
             var a = i.assigned_to;
             if (a != null) {

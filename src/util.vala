@@ -38,6 +38,16 @@ namespace Redmine {
         return dt == null ? iso : dt.format ("%-d %b %Y").strip ();
     }
 
+    /** «22 окт» — дата в текущем году без года и без точки сокращения (formatDateShort на Android), иначе format_date. */
+    public string format_date_short (string? iso, DateTime? today = null) {
+        var t = today ?? new DateTime.now_local ();
+        if (iso == null || iso.length < 10 || iso.substring (0, 4) != t.format ("%Y")) return format_date (iso);
+        var dt = new DateTime.from_iso8601 (iso.substring (0, 10) + "T00:00:00", new TimeZone.local ());
+        if (dt == null) return iso;
+        var r = dt.format ("%-d %b").strip ();
+        return r.has_suffix (".") ? r.substring (0, r.length - 1) : r;
+    }
+
     public string format_datetime (string? iso) {
         var dt = local_dt (iso);
         return dt == null ? (iso ?? "") : dt.format ("%-d %b %Y, %H:%M").strip ();
