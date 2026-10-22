@@ -1176,3 +1176,25 @@ msgstr "Телефонный вид"
 
 msgid "today"
 msgstr "сегодня"
+
+msgid "Links to issues, projects and people of your server open in the app — with a link router such as Switchyard"
+msgstr "Ссылки на задачи, проекты и людей своего сервера открываются в приложении — через маршрутизатор ссылок, например Switchyard"
+
+msgid "No web browser to open the link: Redmine itself is set as the default browser"
+msgstr "Нечем открыть ссылку: браузером по умолчанию назначен сам Redmine"
+
+msgid "Links"
+msgstr "Ссылки"
+
+msgid "Open Server Links in the App"
+msgstr "Открывать ссылки сервера в приложении"
+
+#, c-format
+msgid "Issues, projects and people of %s. Choose Redmine for this domain in a link router such as Switchyard; other links go to the web browser"
+msgstr "Задачи, проекты и люди %s. Назначьте Redmine для этого домена в маршрутизаторе ссылок, например Switchyard; остальные ссылки уйдут в браузер"
+
+msgid "Get Switchyard"
+msgstr "Установить Switchyard"
+
+msgid "Link router: opens links of chosen domains in chosen apps"
+msgstr "Маршрутизатор ссылок: открывает ссылки выбранных доменов в выбранных приложениях"

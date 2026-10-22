@@ -99,6 +99,51 @@ void test_waf () {
     assert (!key_allowed (b, Uri.parse ("https://evil.example/x", UriFlags.NONE)));
 }
 
+void test_server_link () {
+    var S = "https://my.basealt.space";
+    var l = ServerLink.parse (S, "https://my.basealt.space/issues/123");
+    assert (l != null && l.kind == LinkKind.ISSUE && l.id == 123 && l.note_index == 0 && l.journal_id == 0);
+    l = ServerLink.parse (S, "https://my.basealt.space/issues/123#note-4");
+    assert (l.id == 123 && l.note_index == 4);
+    l = ServerLink.parse (S, "https://my.basealt.space/issues/123?tab=history#change-98765");
+    assert (l.id == 123 && l.journal_id == 98765 && l.note_index == 0);
+    // http вместо https, хост в другом регистре, явный порт по умолчанию
+    assert (ServerLink.parse (S, "http://My.BaseAlt.Space/issues/5").id == 5);
+    assert (ServerLink.parse (S, "https://my.basealt.space:443/issues/5").id == 5);
+    assert (ServerLink.parse (S, "https://my.basealt.space:8443/issues/5") == null);
+    assert (ServerLink.parse ("https://r.example:8443", "https://r.example:8443/issues/5").id == 5);
+    assert (ServerLink.parse ("https://r.example:8443", "https://r.example/issues/5") == null);
+    // чужие
+    assert (ServerLink.parse (S, "https://redmine.org/issues/123") == null);
+    assert (ServerLink.parse (S, "https://my.basealt.space.evil.com/issues/123") == null);
+    assert (ServerLink.parse (S, "ftp://my.basealt.space/issues/123") == null);
+    assert (ServerLink.parse ("", "https://my.basealt.space/issues/123") == null);
+    // не задача/проект/человек — в браузер
+    assert (ServerLink.parse (S, "https://my.basealt.space/issues") == null);
+    assert (ServerLink.parse (S, "https://my.basealt.space/issues/123.json") == null);
+    assert (ServerLink.parse (S, "https://my.basealt.space/issues/123/edit") == null);
+    assert (ServerLink.parse (S, "https://my.basealt.space/") == null);
+    assert (ServerLink.parse (S, "https://my.basealt.space/my/page") == null);
+    // проекты (с подстраницами и параметрами запроса)
+    l = ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus");
+    assert (l.kind == LinkKind.PROJECT && l.project == "sisyphus");
+    l = ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/issues?set_filter=1&status_id=o");
+    assert (l.kind == LinkKind.PROJECT && l.project == "sisyphus");
+    assert (ServerLink.parse (S, "https://my.basealt.space/projects") == null);
+    // люди
+    l = ServerLink.parse (S, "https://my.basealt.space/users/107");
+    assert (l.kind == LinkKind.USER && l.id == 107);
+    l = ServerLink.parse (S, "https://my.basealt.space/people/107?tab=activity");
+    assert (l.kind == LinkKind.USER && l.id == 107);
+    assert (ServerLink.parse (S, "https://my.basealt.space/users/current") == null);
+    // подпуть установки
+    var R = "https://host.example/redmine/";
+    assert (ServerLink.parse (R, "https://host.example/redmine/issues/7#note-2").note_index == 2);
+    assert (ServerLink.parse (R, "https://host.example/issues/7") == null);
+    assert (ServerLink.parse (R, "https://host.example/redmine2/issues/7") == null);
+    assert (ServerLink.parse (R, "https://host.example/redmine/projects/x").project == "x");
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -108,5 +153,6 @@ int main (string[] args) {
     Test.add_func ("/logic/filter", test_filter);
     Test.add_func ("/logic/group", test_group);
     Test.add_func ("/logic/waf", test_waf);
+    Test.add_func ("/logic/server-link", test_server_link);
     return Test.run ();
 }

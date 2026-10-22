@@ -13,6 +13,7 @@
       <li>Issue view with comments, changes and time log</li>
       <li>Status, assignee, progress, priority and all fields including custom ones</li>
       <li>Notifications about comments, mentions and changes</li>
+      <li>Links to issues, projects and people of your server open in the app — with a link router such as Switchyard</li>
     </ul>
   </description>
   <developer id="ru.toxblh">

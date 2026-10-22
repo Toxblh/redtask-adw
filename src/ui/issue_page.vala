@@ -56,6 +56,7 @@ namespace Redmine {
     public class IssuePage : Adw.NavigationPage, Refreshable {
         public int issue_id;
         private int pending_note;
+        private int pending_index;
         private Issue? issue = null;
         private GenericArray<Json.Object> times = new GenericArray<Json.Object> ();
         private Perms can = new Perms ();
@@ -140,6 +141,12 @@ namespace Redmine {
         }
 
         public void refresh () { load.begin (); }
+
+        /** #note-K из адреса на сайте: K — порядковый номер записи журнала, а не её id. */
+        public void reveal_note_index (int k) {
+            pending_index = k;
+            if (issue != null) scroll_to_note ();
+        }
 
         public void reveal_note (int note) {
             pending_note = note;
@@ -486,10 +493,11 @@ namespace Redmine {
         private void render () {
             if (issue == null) return;
             var keep = sw.vadjustment.value;
-            Idle.add (() => { if (pending_note == 0) sw.vadjustment.value = keep; return Source.REMOVE; });
+            Idle.add (() => { if (pending_note == 0 && pending_index == 0) sw.vadjustment.value = keep; return Source.REMOVE; });
             clear_box (body);
             note_widgets.remove_all ();
             var i = issue;
+            RichText.learn (i);
             wt.title = "#%d".printf (i.id);
             wt.subtitle = i.project.name;
             title = "#%d %s".printf (i.id, i.subject);
@@ -616,7 +624,7 @@ namespace Redmine {
             render_activity ();
             state.content ();
             update_actions ();
-            if (pending_note > 0) Idle.add (() => { scroll_to_note (); return Source.REMOVE; });
+            if (pending_note > 0 || pending_index > 0) Idle.add (() => { scroll_to_note (); return Source.REMOVE; });
         }
 
         private void sync_order (Gtk.ToggleButton b) {
@@ -840,7 +848,7 @@ namespace Redmine {
                 g.add_action (reply);
                 m.append (_("_Reply with Quote"), "j.reply");
                 var copy = new SimpleAction ("copy", null);
-                copy.activate.connect (() => { copy_text (this, link () + "#note-%d".printf (jid)); win ()?.toast (_("Link copied")); });
+                copy.activate.connect (() => { copy_text (this, link () + "#change-%d".printf (jid)); win ()?.toast (_("Link copied")); });
                 g.add_action (copy);
                 m.append (_("Copy _Link"), "j.copy");
                 if (can.has_own ("edit_issue_notes", "edit_own_issue_notes", user.id == me, user.id == me)) {
@@ -964,6 +972,12 @@ namespace Redmine {
 
         /** Переход к комментарию (из уведомления, #note-N): прокрутка и подсветка; нет на вкладке — «Все». */
         private void scroll_to_note () {
+            // ponytail: номер считаем по видимому нам журналу — чужие приватные записи сдвигают его на сайте
+            if (pending_index > 0 && issue != null && issue.full) {
+                var js = issue.journals;
+                if (pending_index <= js.length) pending_note = jint (js[pending_index - 1], "id");
+                pending_index = 0;
+            }
             var note = pending_note;
             if (note <= 0 || issue == null) return;
             var w = note_widgets[note];

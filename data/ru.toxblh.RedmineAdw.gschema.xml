@@ -27,6 +27,9 @@
     <key name="muted-projects" type="as"><default>[]</default><summary>Проекты без уведомлений, «id|название»</summary></key>
     <key name="notif-by-issue" type="b"><default>false</default><summary>Колокольчик: по задачам вместо ленты</summary></key>
 
+    <key name="open-server-links" type="b"><default>true</default>
+      <summary>Открывать пришедшие ссылки своего сервера в приложении, остальные — в браузере</summary></key>
+
     <key name="window-width" type="i"><default>1100</default></key>
     <key name="window-height" type="i"><default>720</default></key>
     <key name="window-maximized" type="b"><default>false</default></key>

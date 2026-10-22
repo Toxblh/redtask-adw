@@ -3,6 +3,7 @@ core_sources = files(
   'api/models.vala',
   'textile/textile.vala',
   'notify/rules.vala',
+  'server_link.vala',
 )
 
 app_sources = core_sources + files(

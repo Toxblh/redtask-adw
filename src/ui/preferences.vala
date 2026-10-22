@@ -27,6 +27,28 @@ namespace Redmine {
             });
             acc.add (out_row);
             general.add (acc);
+
+            // ссылки сервера: назначить приложение для домена — дело маршрутизатора ссылок, не наше
+            var links = new Adw.PreferencesGroup () { title = _("Links") };
+            Uri? su = null;
+            try { su = Uri.parse (p.server_url, UriFlags.NONE); } catch (Error e) {}
+            var host = su?.get_host () ?? p.server_url;
+            var open_links = new Adw.SwitchRow () {
+                title = _("Open Server Links in the App"),
+                subtitle = Markup.escape_text (_("Issues, projects and people of %s. Choose Redmine for this domain in a link router such as Switchyard; other links go to the web browser").printf (host)),
+            };
+            p.s.bind ("open-server-links", open_links, "active", SettingsBindFlags.DEFAULT);
+            links.add (open_links);
+            // в песочнице чужих приложений не видно — там строка остаётся всегда, Flathub сам покажет «Открыть»
+            var have_sy = false;
+            foreach (var ai in AppInfo.get_all ()) if (ai.get_id () == "io.github.alyraffauf.Switchyard.desktop") have_sy = true;
+            if (!have_sy) {
+                var get_sy = new Adw.ActionRow () { title = _("Get Switchyard"), subtitle = _("Link router: opens links of chosen domains in chosen apps"), activatable = true };
+                get_sy.add_suffix (new Gtk.Image.from_icon_name ("adw-external-link-symbolic"));
+                get_sy.activated.connect (() => new Gtk.UriLauncher ("https://flathub.org/apps/io.github.alyraffauf.Switchyard").launch.begin (get_root () as Gtk.Window, null));
+                links.add (get_sy);
+            }
+            general.add (links);
             add (general);
 
             // ---- уведомления ----

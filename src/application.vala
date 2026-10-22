@@ -73,15 +73,43 @@ namespace Redmine {
             else w.show_main ();
         }
 
+        /**
+         * Ссылки снаружи (маршрутизатор ссылок — Switchyard, Junction — отдаёт нам http/https): свой сервер —
+         * в приложении, остальное и при выключенном тумблере — браузеру по умолчанию.
+         */
         public override void open (File[] files, string hint) {
-            activate ();
-            foreach (var f in files) {
-                MatchInfo mi;
-                if (/\/issues\/(\d+)(?:#note-(\d+))?/.match (f.get_uri (), 0, out mi)) {
-                    var note = mi.get_match_count () > 2 ? int.parse (mi.fetch (2)) : 0;
-                    main_window ().open_issue (int.parse (mi.fetch (1)), note);
+            foreach (var f in files) open_uri (f.get_uri ());
+        }
+
+        private string? pending_uri = null;
+        private string? last_forward = null;
+        private int64 last_forward_at = 0;
+
+        public void open_uri (string uri) {
+            var p = Prefs.get_default ();
+            if (!p.s.get_boolean ("open-server-links") || ServerLink.parse (session?.server ?? p.server_url, uri) == null) {
+                // та же ссылка вернулась сразу — браузер по умолчанию мы сами: не гоняем её по кругу
+                if (uri == last_forward && get_monotonic_time () - last_forward_at < 5 * 1000000) {
+                    activate ();
+                    main_window ().toast (_("No web browser to open the link: Redmine itself is set as the default browser"), 5);
+                    return;
                 }
+                last_forward = uri;
+                last_forward_at = get_monotonic_time ();
+                hold ();
+                new Gtk.UriLauncher (uri).launch.begin (get_active_window (), null, (o, r) => {
+                    try {
+                        ((Gtk.UriLauncher) o).launch.end (r);
+                    } catch (Error e) {
+                        warning ("open %s: %s", uri, e.message);
+                    }
+                    release ();
+                });
+                return;
             }
+            if (session == null) pending_uri = uri; // после восстановления входа или входа заново
+            activate ();
+            if (session != null) main_window ().open_link (ServerLink.parse (session.server, uri));
         }
 
         public Window main_window () {
@@ -169,6 +197,11 @@ namespace Redmine {
             foreach (var x in get_windows ()) if (x is Window) ((Window) x).show_main ();
             poller.start ();
             sync_background ();
+            if (pending_uri != null) {
+                var u = pending_uri;
+                pending_uri = null;
+                open_uri (u);
+            }
         }
 
         private void withdraw_all () {

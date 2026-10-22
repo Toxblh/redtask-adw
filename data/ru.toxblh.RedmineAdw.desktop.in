@@ -8,5 +8,7 @@ Type=Application
 Categories=GNOME;GTK;Office;ProjectManagement;
 Keywords=redmine;issues;tasks;bug;tracker;
 StartupNotify=true
+# не браузер по умолчанию: обработчик ссылок для маршрутизатора (Switchyard, Junction) — ссылки своего сервера
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
 DBusActivatable=false
 X-Purism-FormFactor=Workstation;Mobile;

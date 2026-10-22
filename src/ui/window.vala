@@ -177,6 +177,42 @@ namespace Redmine {
             inner.show_content = true;
         }
 
+        /** Ссылка своего сервера, пришедшая снаружи (App.open_uri). */
+        public void open_link (ServerLink l) {
+            switch (l.kind) {
+                case LinkKind.ISSUE:
+                    open_issue (l.id, l.journal_id);
+                    if (l.note_index > 0) (issue_nav.visible_page as IssuePage)?.reveal_note_index (l.note_index);
+                    break;
+                case LinkKind.USER:
+                    new PersonCard (l.id).present (this);
+                    break;
+                case LinkKind.PROJECT:
+                    open_project.begin (l.project);
+                    break;
+            }
+        }
+
+        /** Проект по идентификатору из адреса (или номеру): из кэша списка проектов, иначе — с сервера. */
+        private async void open_project (string ident) {
+            var s = App.get ().session;
+            if (s == null) return;
+            Json.Object? found = null;
+            var all = s.refs.projects_cached ();
+            if (all != null) foreach (var p in all) if (jstr (p, "identifier") == ident || jint (p, "id").to_string () == ident) found = p;
+            if (found == null) {
+                try {
+                    found = jobj (yield s.api.get_obj ("projects/%s.json".printf (Uri.escape_string (ident))), "project");
+                } catch (Error e) {
+                    toast_error (e);
+                    return;
+                }
+            }
+            if (found == null) return;
+            show_section ("projects");
+            push_list (new ProjectIssuesPage (jint (found, "id"), jstr (found, "name")));
+        }
+
         public void new_issue (int project_id, int parent_id) {
             if (App.get ().session == null) return;
             var d = new IssueEditDialog.create (project_id, parent_id);
