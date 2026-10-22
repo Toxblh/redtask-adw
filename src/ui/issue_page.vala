@@ -971,7 +971,9 @@ namespace Redmine {
     /** Списки могли устареть после правки задачи — текущий раздел тихо обновляется. */
     namespace ListsStale {
         public void mark () {
-            App.get ().main_window ().current_section ()?.refresh ();
+            // только списки задач: «обновить» колокольчика — это внеочередной опрос сервера
+            var sec = App.get ().main_window ().current_section ();
+            if (sec is IssueListSection) sec.refresh ();
         }
     }
 }
