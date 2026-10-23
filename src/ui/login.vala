@@ -198,6 +198,8 @@ namespace Redmine {
             content_height = 720;
             web = (WebKit.WebView) Object.new (typeof (WebKit.WebView), "network-session", web_session ());
             web.vexpand = true;
+            // Basic-вызов «Redmine API» — не вход на сайт: окно логина/пароля WebKit не показываем
+            web.authenticate.connect ((req) => { req.cancel (); return true; });
             web.load_uri (server + "/login");
             hint = new Gtk.Label (_("Sign in to your Redmine account — the app picks up the key automatically")) {
                 wrap = true, margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6, xalign = 0,
@@ -236,6 +238,8 @@ namespace Redmine {
             }
             try {
                 var v = yield web.call_async_javascript_function (
+                    // до входа на сайт API ответит 401 с Basic-вызовом — WebKit показал бы окно логина/пароля
+                    "if(!document.querySelector('#loggedas'))return '';" +
                     "let k='';try{const r=await fetch('/users/current.json',{credentials:'same-origin'});k=(JSON.parse(await r.text()).user||{}).api_key||''}catch(e){}" +
                     "if(!k){try{const r2=await fetch('/my/api_key',{credentials:'same-origin'});const m=String(await r2.text()).match(/[a-f0-9]{40}/i);if(m)k=m[0]}catch(e){}}" +
                     "return k;", -1, null, null, null, null);
