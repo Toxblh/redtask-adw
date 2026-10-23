@@ -45,6 +45,7 @@
     <color type="primary" scheme_preference="dark">#a51d2d</color>
   </branding>
   <releases>
+    <release version="1.0.1" date="2026-10-23"/>
     <release version="0.1.0" date="2026-10-22"/>
   </releases>
 </component>
