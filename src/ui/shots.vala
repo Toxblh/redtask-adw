@@ -5,6 +5,7 @@ namespace Redmine {
      * REDMINE_ADW_SHOT_SIZE=ШxВ, REDMINE_ADW_SHOT_ISSUE=номер — открыть задачу, REDMINE_ADW_SHOT_SECTION=имя раздела.
      * REDMINE_ADW_SHOT_PERSON=id — открыть карточку человека.
      * REDMINE_ADW_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
+     * REDMINE_ADW_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDMINE_ADW_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      */
     namespace Shots {
@@ -60,9 +61,21 @@ namespace Redmine {
                     debug ("shot: dialog %s %dx%d mapped=%s", d.get_type ().name (), d.get_width (), d.get_height (), d.get_mapped ().to_string ());
                     save (d, Environment.get_variable ("REDMINE_ADW_SHOT") + ".dialog.png");
                 }
+                // REDMINE_ADW_SHOT_WIDE=N — кто требует ширину больше N: виновник окна, вылезающего за экран телефона
+                var wide = Environment.get_variable ("REDMINE_ADW_SHOT_WIDE");
+                if (wide != null) dump_wide (w, int.parse (wide), 0);
                 w.application.quit ();
                 return Source.REMOVE;
             });
+        }
+
+        private void dump_wide (Gtk.Widget wd, int limit, int depth) {
+            int min, nat, mb, nb;
+            wd.measure (Gtk.Orientation.HORIZONTAL, -1, out min, out nat, out mb, out nb);
+            var l = wd as Gtk.Label;
+            var extra = l != null ? " «%s»".printf (l.label.substring (0, int.min (60, l.label.length))) : "";
+            if (min > limit || wd.get_width () > limit) print ("%s%s .%s min=%d w=%d%s\n", string.nfill (depth, ' '), wd.get_type ().name (), string.joinv (".", wd.get_css_classes ()), min, wd.get_width (), extra);
+            for (var c = wd.get_first_child (); c != null; c = c.get_next_sibling ()) dump_wide (c, limit, depth + 1);
         }
 
         private async void copy_all (Gtk.Widget page) {

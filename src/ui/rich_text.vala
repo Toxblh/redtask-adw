@@ -168,7 +168,11 @@ namespace Redmine {
                     return q;
                 case Textile.BlockKind.COLLAPSE:
                     var l0 = b.lines[0];
-                    var ex = new Gtk.Expander (l0.text != "" ? l0.text : _("Show details"));
+                    var ex = new Gtk.Expander (null);
+                    // заголовок своим ярлыком с переносом: стандартный — в одну строку и распирает окно на телефоне
+                    ex.label_widget = new Gtk.Label (l0.text != "" ? l0.text : _("Show details")) {
+                        wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, xalign = 0,
+                    };
                     var inner = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_top = 6 };
                     build (inner, l0.children, depth + 1);
                     ex.child = inner;
