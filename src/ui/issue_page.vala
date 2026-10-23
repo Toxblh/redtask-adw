@@ -735,22 +735,7 @@ namespace Redmine {
             var me = App.get ().session.user_id;
             foreach (var att in atts) {
                 var name = jstr (att, "filename");
-                var row = new Adw.ActionRow () {
-                    title = Markup.escape_text (name),
-                    subtitle = Markup.escape_text (human_size (jint (att, "filesize")) + " · " + jstr (jobj (att, "author"), "name") + " · " + format_relative (jstr (att, "created_on"))),
-                    activatable = true, title_lines = 2,
-                };
-                var icon = new Gtk.Image.from_icon_name (file_icon (name, jstr (att, "content_type"))) { pixel_size = 32 };
-                row.add_prefix (icon);
-                if (jstr (att, "thumbnail_url") != "" || is_image_name (name)) {
-                    var thumb = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, visible = false };
-                    load_attachment_texture.begin (att, true, null, (o, r) => {
-                        var t = load_attachment_texture.end (r);
-                        if (t != null) { thumb.paintable = t; thumb.visible = true; icon.visible = false; }
-                    });
-                    row.add_prefix (thumb);
-                }
-                row.activated.connect (() => open_attachment.begin (this, att));
+                var row = file_row (att);
                 var author = jint (jobj (att, "author"), "id");
                 if (edit || author == me) {
                     var del = new Gtk.Button.from_icon_name ("user-trash-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Delete %s").printf (name) };
@@ -766,6 +751,28 @@ namespace Redmine {
                 list.append (row);
             }
             body.append (list);
+        }
+
+        /** Строка файла: значок или миниатюра, размер · автор · когда; нажатие — просмотр или скачивание. */
+        private Adw.ActionRow file_row (Json.Object att) {
+            var name = jstr (att, "filename");
+            var row = new Adw.ActionRow () {
+                title = Markup.escape_text (name),
+                subtitle = Markup.escape_text (human_size (jint (att, "filesize")) + " · " + jstr (jobj (att, "author"), "name") + " · " + format_relative (jstr (att, "created_on"))),
+                activatable = true, title_lines = 2,
+            };
+            var icon = new Gtk.Image.from_icon_name (file_icon (name, jstr (att, "content_type"))) { pixel_size = 32 };
+            row.add_prefix (icon);
+            if (jstr (att, "thumbnail_url") != "" || is_image_name (name)) {
+                var thumb = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, visible = false };
+                load_attachment_texture.begin (att, true, null, (o, r) => {
+                    var t = load_attachment_texture.end (r);
+                    if (t != null) { thumb.paintable = t; thumb.visible = true; icon.visible = false; }
+                });
+                row.add_prefix (thumb);
+            }
+            row.activated.connect (() => open_attachment.begin (this, att));
+            return row;
         }
 
         private void render_watchers () {
@@ -901,6 +908,16 @@ namespace Redmine {
                 var rt = new RichText (text, issue.attachments);
                 rt.note_activated.connect ((n) => reveal_note_index (n));
                 inner.append (rt);
+                // файлы, пришедшие с этим комментарием (details property=attachment, name — id вложения), —
+                // строками под текстом; удалённые потом из задачи не показываем: открывать там нечего
+                Gtk.ListBox? files = null;
+                foreach (var d in jarr (j, "details")) {
+                    if (jstr (d, "property") != "attachment" || jstr (d, "new_value") == "") continue;
+                    foreach (var att in issue.attachments) if (jstr (att, "id") == jstr (d, "name")) {
+                        if (files == null) { files = boxed (); files.margin_top = 4; inner.append (files); }
+                        files.append (file_row (att));
+                    }
+                }
             }
             if (is_private) inner.add_css_class ("journal-private");
             box.append (inner);
