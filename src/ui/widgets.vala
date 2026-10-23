@@ -45,6 +45,17 @@ namespace Redmine {
         }
     }
 
+    /** Плавающая кнопка «Обновить» в правом нижнем углу — вместо «потянуть вниз» с Android/iOS. */
+    public Gtk.Overlay refresh_overlay (Gtk.Widget content, owned Callback on_click) {
+        var b = new Gtk.Button.from_icon_name ("view-refresh-symbolic") { tooltip_text = _("Refresh"), halign = Gtk.Align.END, valign = Gtk.Align.END, margin_end = 18, margin_bottom = 18 };
+        b.add_css_class ("osd");
+        b.add_css_class ("circular");
+        b.clicked.connect (() => on_click ());
+        var o = new Gtk.Overlay () { child = content };
+        o.add_overlay (b);
+        return o;
+    }
+
     /** Строка списка задач: «#номер тема», ниже — статус · проект · исполнитель · когда. */
     /** Статус пилюлей: полупрозрачный фон и цветной текст по виду (style.css, .status-pill). */
     public Gtk.Label status_pill (string name, bool closed) {

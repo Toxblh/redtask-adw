@@ -108,7 +108,7 @@ namespace Redmine {
             });
             hb.pack_end (star);
 
-            body = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 24 };
+            body = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 72 }; // снизу — место под кнопку «Обновить»
             // без прокрутки к фокусу: перерисовка (права, имена) не должна уводить экран к кнопке внизу
             var vp = new Gtk.Viewport (null, null) { scroll_to_focus = false, child = new Adw.Clamp () { child = body, maximum_size = 860, tightening_threshold = 600 } };
             sw = new Gtk.ScrolledWindow () { child = vp, hscrollbar_policy = Gtk.PolicyType.NEVER, vexpand = true };
@@ -131,7 +131,7 @@ namespace Redmine {
 
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);
-            tv.content = state;
+            tv.content = refresh_overlay (state, () => refresh ());
             tv.add_bottom_bar (bottom);
             child = tv;
 
