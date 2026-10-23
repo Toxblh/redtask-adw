@@ -163,7 +163,12 @@ namespace Redmine {
             if (!server.has_prefix ("http://") && !server.has_prefix ("https://")) server = "https://" + server;
             var api = new Client (server, key);
             var me = yield api.current_user ();
-            yield Secrets.store (server, key.strip ());
+            // связка ключей заблокирована или нет её (телефон без пароля входа) — входим всё равно, ключ просто не запомнится
+            try {
+                yield Secrets.store (server, key.strip ());
+            } catch (Error e) {
+                warning ("secret store: %s", e.message);
+            }
             var p = Prefs.get_default ();
             // другая учётка — отключённые задачи и проекты прежней к ней не относятся
             if (p.server_url != server || p.user_id != me.id) {
