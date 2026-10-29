@@ -278,6 +278,28 @@ namespace Redmine {
         }
     }
 
+    /** Строка файла: значок или миниатюра, размер · автор · когда; нажатие — просмотр или скачивание. */
+    public Adw.ActionRow attachment_row (Json.Object att) {
+        var name = jstr (att, "filename");
+        var row = new Adw.ActionRow () {
+            title = Markup.escape_text (name),
+            subtitle = Markup.escape_text (human_size (jint (att, "filesize")) + " · " + jstr (jobj (att, "author"), "name") + " · " + format_relative (jstr (att, "created_on"))),
+            activatable = true, title_lines = 2,
+        };
+        var icon = new Gtk.Image.from_icon_name (file_icon (name, jstr (att, "content_type"))) { pixel_size = 32 };
+        row.add_prefix (icon);
+        if (jstr (att, "thumbnail_url") != "" || is_image_name (name)) {
+            var thumb = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, visible = false };
+            load_attachment_texture.begin (att, true, null, (o, r) => {
+                var t = load_attachment_texture.end (r);
+                if (t != null) { thumb.paintable = t; thumb.visible = true; icon.visible = false; }
+            });
+            row.add_prefix (thumb);
+        }
+        row.activated.connect ((r) => open_attachment.begin (r, att));
+        return row;
+    }
+
     public bool is_image_name (string name) {
         var n = name.down ();
         foreach (var ext in new string[] { ".png", ".jpg", ".jpeg", ".jpe", ".gif", ".bmp", ".webp" }) if (n.has_suffix (ext)) return true;
@@ -359,6 +381,14 @@ namespace Redmine {
                 yield new Gtk.FileLauncher (File.new_for_path (path)).launch (from.get_root () as Gtk.Window, null);
             } catch (Error e) {}
         }
+    }
+
+    /** Контекстное меню у точки нажатия; после закрытия снимается с виджета. */
+    public void popup_menu (Gtk.Widget row, MenuModel m, double x, double y) {
+        var pop = new Gtk.PopoverMenu.from_model (m) { has_arrow = true, pointing_to = { (int) x, (int) y, 1, 1 } };
+        pop.set_parent (row);
+        pop.closed.connect (() => Idle.add (() => { pop.unparent (); return Source.REMOVE; }));
+        pop.popup ();
     }
 
     /** Виджет в карточке (.card): текст описания, вики, обзора проекта. */

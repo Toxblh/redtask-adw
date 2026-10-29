@@ -130,6 +130,15 @@ void test_server_link () {
     l = ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/issues?set_filter=1&status_id=o");
     assert (l.kind == LinkKind.PROJECT && l.project == "sisyphus");
     assert (ServerLink.parse (S, "https://my.basealt.space/projects") == null);
+    // разделы проекта, вехи и страницы вики — в приложении
+    assert (ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/roadmap").tab == "versions");
+    assert (ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus").tab == "overview");
+    assert (ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/issues").tab == "");
+    assert (ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/wiki").tab == "wiki");
+    l = ServerLink.parse (S, "https://my.basealt.space/projects/sisyphus/wiki/%D0%9A%D0%B0%D0%BA_%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%D1%82%D1%8C");
+    assert (l.kind == LinkKind.WIKI && l.project == "sisyphus" && l.title == "Как_работать");
+    l = ServerLink.parse (S, "https://my.basealt.space/versions/42");
+    assert (l.kind == LinkKind.VERSION && l.id == 42);
     // люди
     l = ServerLink.parse (S, "https://my.basealt.space/users/107");
     assert (l.kind == LinkKind.USER && l.id == 107);

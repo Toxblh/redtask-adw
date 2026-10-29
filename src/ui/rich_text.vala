@@ -18,6 +18,8 @@ namespace Redmine {
         private GenericArray<Json.Object> atts;
         private int quote_depth = 0;
         private bool quotable;
+        /** Проект для [[Страница]] без проекта: идентификатор или номер; пусто — такие ссылки в браузер не уходят. */
+        public string wiki_project = "";
         /** Ссылка #note-K на комментарий этой же задачи: K — порядковый номер записи журнала. */
         public signal void note_activated (int note);
         /** «Ответить с цитатой» в меню выделения (quotable): выделенный текст, как он виден на экране. */
@@ -296,6 +298,13 @@ namespace Redmine {
             if (uri.has_prefix ("issue:")) {
                 var p = uri.substring (6).split (":");
                 if (w != null) w.open_link (new ServerLink () { kind = LinkKind.ISSUE, id = int.parse (p[0]), note_index = p.length > 1 ? int.parse (p[1]) : 0 }, true);
+                return;
+            }
+            if (uri.has_prefix ("wiki:")) {
+                var rest = uri.substring (5);
+                var c = rest.index_of (":");
+                var proj = c > 0 ? rest.substring (0, c) : wiki_project;
+                if (proj != "" && w != null) w.open_content (new WikiPage (proj, rest.substring (c + 1)));
                 return;
             }
             if (uri.has_prefix ("note:")) {

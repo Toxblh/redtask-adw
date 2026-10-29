@@ -20,6 +20,7 @@ app_sources = core_sources + files(
   'ui/rich_text.vala',
   'ui/person.vala',
   'ui/lists.vala',
+  'ui/project.vala',
   'ui/notifications.vala',
   'ui/issue_page.vala',
   'ui/issue_dialogs.vala',

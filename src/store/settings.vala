@@ -23,6 +23,21 @@ namespace Redmine {
             for (size_t i = 0; i < v.n_children (); i++) res += v.get_child_value (i).get_int32 ();
             return res;
         }
+        // ---- избранные проекты: «сервер|пользователь|id» — у каждой учётки свои ----
+        private string pin_prefix () { return "%s|%d|".printf (server_url, user_id); }
+        public int[] project_pins () {
+            int[] res = {};
+            foreach (var v in s.get_strv ("pinned-projects")) if (v.has_prefix (pin_prefix ())) res += int.parse (v.substring (pin_prefix ().length));
+            return res;
+        }
+        public void set_project_pin (int id, bool on) {
+            string[] res = {};
+            var key = pin_prefix () + id.to_string ();
+            foreach (var v in s.get_strv ("pinned-projects")) if (v != key) res += v;
+            if (on) res += key;
+            s.set_strv ("pinned-projects", res);
+        }
+
         // ---- отключённые задачи/проекты: «id|название» ----
         public HashTable<int, string> muted (string key) {
             var res = new HashTable<int, string> (direct_hash, direct_equal);

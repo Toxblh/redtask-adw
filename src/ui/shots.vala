@@ -3,7 +3,7 @@ namespace Redmine {
      * Скриншоты для README/metainfo и визуальной проверки: REDMINE_ADW_SHOT=путь.png — через REDMINE_ADW_SHOT_DELAY мс
      * окно рендерится само в PNG (Wayland не даёт снимать чужие окна) и приложение выходит.
      * REDMINE_ADW_SHOT_SIZE=ШxВ, REDMINE_ADW_SHOT_ISSUE=номер — открыть задачу, REDMINE_ADW_SHOT_SECTION=имя раздела.
-     * REDMINE_ADW_SHOT_PERSON=id — открыть карточку человека.
+     * REDMINE_ADW_SHOT_PERSON=id — открыть карточку человека. REDMINE_ADW_SHOT_LINK=адрес — открыть как ссылку своего сервера.
      * REDMINE_ADW_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
      * REDMINE_ADW_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDMINE_ADW_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
@@ -16,9 +16,21 @@ namespace Redmine {
             var wh = size.split ("x");
             w.set_default_size (int.parse (wh[0]), int.parse (wh[1]));
             var delay = int.parse (Environment.get_variable ("REDMINE_ADW_SHOT_DELAY") ?? "6000");
+            // REDMINE_ADW_SHOT_SET=ключ=значение-GVariant;… — настройки на этот снимок (в песочнице dev.sh они не сохраняются)
+            foreach (var kv in (Environment.get_variable ("REDMINE_ADW_SHOT_SET") ?? "").split (";")) {
+                var eq = kv.index_of ("=");
+                if (eq < 0) continue;
+                try {
+                    Prefs.get_default ().s.set_value (kv.substring (0, eq), Variant.parse (null, kv.substring (eq + 1)));
+                } catch (Error e) { warning ("shot: %s: %s", kv, e.message); }
+            }
             Timeout.add (delay / 2, () => {
                 var sec = Environment.get_variable ("REDMINE_ADW_SHOT_SECTION");
                 if (sec != null) w.show_section (sec);
+                // REDMINE_ADW_SHOT_LINK=адрес своего сервера — как ссылка снаружи: проект (/roadmap, /wiki, /files), веха, вики
+                var link = Environment.get_variable ("REDMINE_ADW_SHOT_LINK");
+                var sl = link != null ? ServerLink.parse (App.get ().session.server, link) : null;
+                if (sl != null) w.open_link (sl);
                 var issue = Environment.get_variable ("REDMINE_ADW_SHOT_ISSUE");
                 if (issue != null) w.open_issue (int.parse (issue));
                 return Source.REMOVE;

@@ -11,6 +11,8 @@
     <key name="favorites-migrated" type="b"><default>false</default><summary>Локальное избранное перенесено на сервер</summary></key>
     <key name="comments-newest-first" type="b"><default>true</default></key>
     <key name="issue-tab" type="s"><default>'comments'</default></key>
+    <key name="pinned-projects" type="as"><default>[]</default><summary>Избранные проекты, «сервер|пользователь|id проекта»: локально, на учётку</summary></key>
+    <key name="version-view" type="s"><default>'list'</default><summary>Экран вехи: list или board</summary></key>
 
     <key name="notifications-enabled" type="b"><default>true</default></key>
     <key name="poll-interval" type="i"><default>15</default><summary>Интервал проверки, мин</summary></key>

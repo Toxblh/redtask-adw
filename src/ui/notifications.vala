@@ -182,13 +182,6 @@ namespace Redmine {
             return row;
         }
 
-        private void popup_menu (Gtk.Widget row, MenuModel m, double x, double y) {
-            var pop = new Gtk.PopoverMenu.from_model (m) { has_arrow = true, pointing_to = { (int) x, (int) y, 1, 1 } };
-            pop.set_parent (row);
-            pop.closed.connect (() => Idle.add (() => { pop.unparent (); return Source.REMOVE; }));
-            pop.popup ();
-        }
-
         private Gtk.Widget unread_dot (bool on) {
             var d = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) { valign = Gtk.Align.CENTER, visible = on };
             d.add_css_class ("unread-dot");

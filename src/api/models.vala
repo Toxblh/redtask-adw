@@ -262,12 +262,10 @@ namespace Redmine {
 
         public GenericArray<Json.Object> journals { owned get { return jarr (o, "journals"); } }
         /** id журналов по порядку: позиция + 1 — номер комментария #note-N. */
-        public int[] journal_ids {
-            owned get {
-                int[] res = {};
-                foreach (var j in journals) res += jint (j, "id");
-                return res;
-            }
+        public int[] journal_ids () {
+            int[] res = {};
+            foreach (var j in journals) res += jint (j, "id");
+            return res;
         }
         public GenericArray<Json.Object> attachments { owned get { return jarr (o, "attachments"); } }
         public GenericArray<Json.Object> children { owned get { return jarr (o, "children"); } }

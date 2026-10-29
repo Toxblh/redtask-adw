@@ -1,7 +1,7 @@
 /* Разбор ссылки на свой сервер Redmine: задача (с комментарием), проект, человек. Чужое — null. */
 namespace Redmine {
 
-    public enum LinkKind { ISSUE, PROJECT, USER }
+    public enum LinkKind { ISSUE, PROJECT, USER, VERSION, WIKI }
 
     public class ServerLink : Object {
         public LinkKind kind;
@@ -9,6 +9,8 @@ namespace Redmine {
         public string project = ""; // идентификатор или номер проекта
         public int note_index;    // #note-K — порядковый номер записи журнала (с 1)
         public int journal_id;    // #change-ID
+        public string tab = "";   // раздел проекта: overview, versions, wiki, files; "" — по умолчанию (задачи)
+        public string title = ""; // страница вики
 
         /** server — адрес учётки (может быть с подпутём: https://host/redmine). http и https — один сервер. */
         public static ServerLink? parse (string server, string uri) {
@@ -37,9 +39,22 @@ namespace Redmine {
                 var frag = u.get_fragment () ?? "";
                 if (/^note-(\d+)$/.match (frag, 0, out mi)) l.note_index = int.parse (mi.fetch (1));
                 else if (/^change-(\d+)$/.match (frag, 0, out mi)) l.journal_id = int.parse (mi.fetch (1));
+            } else if (/^\/versions\/(\d+)\/?$/.match (path, 0, out mi)) {
+                l.kind = LinkKind.VERSION;
+                l.id = int.parse (mi.fetch (1));
+            } else if (/^\/projects\/([^\/]+)\/wiki\/([^\/]+)\/?$/.match (path, 0, out mi)) {
+                l.kind = LinkKind.WIKI;
+                l.project = Uri.unescape_string (mi.fetch (1)) ?? mi.fetch (1);
+                l.title = Uri.unescape_string (mi.fetch (2)) ?? mi.fetch (2);
             } else if (/^\/projects\/([^\/]+)(\/.*)?$/.match (path, 0, out mi)) {
                 l.kind = LinkKind.PROJECT;
                 l.project = Uri.unescape_string (mi.fetch (1)) ?? mi.fetch (1);
+                var sub = mi.fetch (2) ?? "";
+                // как на сайте: /projects/x — обзор
+                if (sub == "" || sub == "/") l.tab = "overview";
+                else if (sub.has_prefix ("/wiki")) l.tab = "wiki";
+                else if (sub.has_prefix ("/roadmap")) l.tab = "versions";
+                else if (sub.has_prefix ("/files")) l.tab = "files";
             } else if (/^\/(users|people)\/(\d+)\/?$/.match (path, 0, out mi)) {
                 l.kind = LinkKind.USER;
                 l.id = int.parse (mi.fetch (2));

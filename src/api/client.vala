@@ -67,6 +67,7 @@ namespace Redmine {
         public bool favourite = false;
         public string status = "open"; // open | closed | *
         public int parent_id = 0;
+        public int fixed_version_id = 0;
         public string? subject = null;
         public string? updated_since = null; // ISO, целые секунды, Z
         public string sort = "updated_on:desc";
@@ -75,7 +76,7 @@ namespace Redmine {
         public IssueQuery copy () {
             var q = new IssueQuery ();
             q.project_id = project_id; q.assigned_to_me = assigned_to_me; q.watched_by_me = watched_by_me;
-            q.authored_by_me = authored_by_me; q.favourite = favourite; q.status = status; q.parent_id = parent_id; q.subject = subject;
+            q.authored_by_me = authored_by_me; q.favourite = favourite; q.status = status; q.parent_id = parent_id; q.fixed_version_id = fixed_version_id; q.subject = subject;
             q.updated_since = updated_since; q.sort = sort; q.limit = limit; q.offset = offset;
             return q;
         }
@@ -382,6 +383,7 @@ namespace Redmine {
                 .add ("status_id", q.status)
                 .add ("project_id", q.project_id > 0 ? q.project_id.to_string () : null)
                 .add ("parent_id", q.parent_id > 0 ? q.parent_id.to_string () : null)
+                .add ("fixed_version_id", q.fixed_version_id > 0 ? q.fixed_version_id.to_string () : null)
                 .add ("assigned_to_id", q.assigned_to_me ? "me" : null)
                 .add ("watcher_id", q.watched_by_me ? "me" : null)
                 .add ("author_id", q.authored_by_me ? "me" : null)

@@ -255,30 +255,6 @@ namespace Redmine {
         public void start_search () { list.start_search (); }
     }
 
-    /** Задачи проекта — страница поверх разделов в колонке списка. */
-    public class ProjectIssuesPage : Adw.NavigationPage, Refreshable {
-        private IssueList list;
-
-        public ProjectIssuesPage (int project_id, string name) {
-            Object (title: name, tag: "project-%d".printf (project_id));
-            list = new IssueList (ListKind.PROJECT, project_id);
-            var tv = new Adw.ToolbarView ();
-            var hb = new Adw.HeaderBar ();
-            var add = new Gtk.Button.from_icon_name ("list-add-symbolic") { tooltip_text = _("New Issue in Project") };
-            add.clicked.connect (() => win_of (this)?.new_issue (project_id, 0));
-            hb.pack_end (add);
-            var search = new Gtk.Button.from_icon_name ("system-search-symbolic") { tooltip_text = _("Search") };
-            search.clicked.connect (() => list.start_search ());
-            hb.pack_end (search);
-            tv.add_top_bar (hb);
-            tv.content = list;
-            child = tv;
-            shown.connect (() => list.shown ());
-        }
-
-        public void refresh () { list.refresh (); }
-    }
-
     /** Проекты: все видимые (их тысячи — поиск по названию обязателен), кэш 7 дней. */
     public class ProjectsSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
@@ -290,7 +266,7 @@ namespace Redmine {
         construct {
             var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             entry = new Gtk.SearchEntry () { placeholder_text = _("Find a project"), margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
-            entry.search_changed.connect (() => list.invalidate_filter ());
+            entry.search_changed.connect (() => { list.invalidate_filter (); list.invalidate_headers (); });
             box.append (entry);
             list = new Gtk.ListBox ();
             list.add_css_class ("navigation-sidebar");
@@ -298,10 +274,17 @@ namespace Redmine {
                 var q = entry.text.strip ().casefold ();
                 return q == "" || ((string) row.get_data<string> ("key")).contains (q);
             });
+            list.set_header_func ((row, before) => {
+                var text = row.get_data<string> ("header");
+                if (text == null || entry.text.strip () != "") { row.set_header (null); return; }
+                var l = new Gtk.Label (text) { xalign = 0, margin_start = 6, margin_top = 12, margin_bottom = 6 };
+                l.add_css_class ("heading");
+                row.set_header (l);
+            });
             list.row_activated.connect ((row) => {
                 var id = row.get_data<int> ("id");
                 var name = (string) row.get_data<string> ("name");
-                win_of (this)?.push_list (new ProjectIssuesPage (id, name));
+                win_of (this)?.push_list (new ProjectPage (id, name));
             });
             var sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
             state = new StateView (sw) { vexpand = true };
@@ -329,32 +312,74 @@ namespace Redmine {
             }
         }
 
+        private GenericArray<Json.Object> all = new GenericArray<Json.Object> ();
+
         private void fill (GenericArray<Json.Object> projects) {
+            all = projects;
             list.remove_all ();
             var names = new HashTable<int, string> (direct_hash, direct_equal);
             foreach (var p in projects) names[jint (p, "id")] = jstr (p, "name");
             var sorted = new GenericArray<Json.Object> ();
             foreach (var p in projects) if (jint (p, "status", 1) == 1) sorted.add (p);
             sorted.sort ((a, b) => strcmp (jstr (a, "name").casefold (), jstr (b, "name").casefold ()));
-            foreach (var p in sorted) {
-                var row = new Gtk.ListBoxRow ();
-                var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
-                var t = new Gtk.Label (jstr (p, "name")) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
-                b.append (t);
-                var parent = Named.from (jobj (p, "parent"));
-                var sub_text = parent != null ? (names[parent.id] ?? parent.name) : jstr (p, "identifier");
-                var sub = new Gtk.Label (sub_text) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
-                sub.add_css_class ("dim-label");
-                sub.add_css_class ("caption");
-                b.append (sub);
-                row.child = b;
-                row.set_data<int> ("id", jint (p, "id"));
-                row.set_data<string> ("name", jstr (p, "name"));
-                row.set_data<string> ("key", (jstr (p, "name") + " " + jstr (p, "identifier") + " " + sub_text).casefold ());
-                list.append (row);
-            }
+            // «Избранные» — сверху, общий список не меняется (закреплённые есть и в нём)
+            var pins = Prefs.get_default ().project_pins ();
+            var pinned = pinned_projects (sorted, pins);
+            foreach (var p in pinned) list.append (project_row (p, names, pins, pinned[0] == p ? _("Favorite Projects") : null));
+            foreach (var p in sorted) list.append (project_row (p, names, pins, pinned.length > 0 && sorted[0] == p ? _("All Projects") : null));
             if (sorted.length == 0) state.empty (_("No Projects"), "folder-symbolic");
             else state.content ();
+        }
+
+        private void toggle_pin (int id, bool on) {
+            Prefs.get_default ().set_project_pin (id, on);
+            var scroll = (list.parent as Gtk.Viewport)?.vadjustment;
+            var keep = scroll != null ? scroll.value : 0;
+            fill (all);
+            if (scroll != null) Idle.add (() => { scroll.value = keep; return Source.REMOVE; });
+        }
+
+        private Gtk.ListBoxRow project_row (Json.Object p, HashTable<int, string> names, int[] pins, string? header) {
+            var id = jint (p, "id");
+            var on = id in pins;
+            var row = new Gtk.ListBoxRow ();
+            var h = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 2 };
+            var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { hexpand = true };
+            var t = new Gtk.Label (jstr (p, "name")) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
+            b.append (t);
+            var parent = Named.from (jobj (p, "parent"));
+            var sub_text = parent != null ? (names[parent.id] ?? parent.name) : jstr (p, "identifier");
+            var sub = new Gtk.Label (sub_text) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
+            sub.add_css_class ("dim-label");
+            sub.add_css_class ("caption");
+            b.append (sub);
+            h.append (b);
+            var star = new Gtk.Button.from_icon_name (on ? "starred-symbolic" : "non-starred-symbolic") {
+                valign = Gtk.Align.CENTER, tooltip_text = on ? _("Remove from Favorites") : _("Add to Favorites"),
+            };
+            star.add_css_class ("flat");
+            star.clicked.connect (() => toggle_pin (id, !on));
+            h.append (star);
+            row.child = h;
+            // контекстное меню: правый клик и долгое нажатие
+            var m = new Menu ();
+            m.append (on ? _("Remove from Favorites") : _("Add to Favorites"), "row.pin");
+            var g = new SimpleActionGroup ();
+            var a = new SimpleAction ("pin", null);
+            a.activate.connect (() => toggle_pin (id, !on));
+            g.add_action (a);
+            row.insert_action_group ("row", g);
+            var click = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
+            click.pressed.connect ((n, x, y) => popup_menu (row, m, x, y));
+            row.add_controller (click);
+            var lp = new Gtk.GestureLongPress () { touch_only = true };
+            lp.pressed.connect ((x, y) => popup_menu (row, m, x, y));
+            row.add_controller (lp);
+            row.set_data<int> ("id", id);
+            row.set_data<string> ("name", jstr (p, "name"));
+            row.set_data<string> ("key", (jstr (p, "name") + " " + jstr (p, "identifier") + " " + sub_text).casefold ());
+            if (header != null) row.set_data<string> ("header", header);
+            return row;
         }
     }
 

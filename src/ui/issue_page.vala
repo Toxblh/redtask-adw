@@ -519,7 +519,7 @@ namespace Redmine {
             clear_box (body);
             note_widgets.remove_all ();
             var i = issue;
-            jids = i.journal_ids;
+            jids = i.journal_ids ();
             RichText.learn (i);
             wt.title = "#%d".printf (i.id);
             wt.subtitle = i.project.name;
@@ -742,7 +742,7 @@ namespace Redmine {
             var me = App.get ().session.user_id;
             foreach (var att in atts) {
                 var name = jstr (att, "filename");
-                var row = file_row (att);
+                var row = attachment_row (att);
                 var author = jint (jobj (att, "author"), "id");
                 if (edit || author == me) {
                     var del = new Gtk.Button.from_icon_name ("user-trash-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Delete %s").printf (name) };
@@ -758,28 +758,6 @@ namespace Redmine {
                 list.append (row);
             }
             body.append (list);
-        }
-
-        /** Строка файла: значок или миниатюра, размер · автор · когда; нажатие — просмотр или скачивание. */
-        private Adw.ActionRow file_row (Json.Object att) {
-            var name = jstr (att, "filename");
-            var row = new Adw.ActionRow () {
-                title = Markup.escape_text (name),
-                subtitle = Markup.escape_text (human_size (jint (att, "filesize")) + " · " + jstr (jobj (att, "author"), "name") + " · " + format_relative (jstr (att, "created_on"))),
-                activatable = true, title_lines = 2,
-            };
-            var icon = new Gtk.Image.from_icon_name (file_icon (name, jstr (att, "content_type"))) { pixel_size = 32 };
-            row.add_prefix (icon);
-            if (jstr (att, "thumbnail_url") != "" || is_image_name (name)) {
-                var thumb = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, visible = false };
-                load_attachment_texture.begin (att, true, null, (o, r) => {
-                    var t = load_attachment_texture.end (r);
-                    if (t != null) { thumb.paintable = t; thumb.visible = true; icon.visible = false; }
-                });
-                row.add_prefix (thumb);
-            }
-            row.activated.connect (() => open_attachment.begin (this, att));
-            return row;
         }
 
         private void render_watchers () {
@@ -834,6 +812,7 @@ namespace Redmine {
         private RichText rich (string text, bool quotable = false) {
             var rt = new RichText (text, issue.attachments, quotable && can.has ("add_issue_notes")) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
             rt.note_activated.connect ((n) => reveal_note_index (n));
+            rt.wiki_project = issue.project.id.to_string ();
             return rt;
         }
 
@@ -933,6 +912,7 @@ namespace Redmine {
                 var rt = new RichText (text, issue.attachments, can.has ("add_issue_notes"));
                 rt.note_activated.connect ((k) => reveal_note_index (k));
                 rt.quote_selected.connect ((sel) => quote_note (j, sel));
+                rt.wiki_project = issue.project.id.to_string ();
                 inner.append (rt);
                 // файлы, пришедшие с этим комментарием (details property=attachment, name — id вложения), —
                 // строками под текстом; удалённые потом из задачи не показываем: открывать там нечего
@@ -941,7 +921,7 @@ namespace Redmine {
                     if (jstr (d, "property") != "attachment" || jstr (d, "new_value") == "") continue;
                     foreach (var att in issue.attachments) if (jstr (att, "id") == jstr (d, "name")) {
                         if (files == null) { files = boxed (); files.margin_top = 4; inner.append (files); }
-                        files.append (file_row (att));
+                        files.append (attachment_row (att));
                     }
                 }
             }
@@ -1048,7 +1028,7 @@ namespace Redmine {
         private void scroll_to_note () {
             // ponytail: номер считаем по видимому нам журналу — чужие приватные записи сдвигают его на сайте
             if (pending_index > 0 && issue != null && issue.full) {
-                var jid = journal_for_fragment (issue.journal_ids, "note-%d".printf (pending_index));
+                var jid = journal_for_fragment (issue.journal_ids (), "note-%d".printf (pending_index));
                 if (jid != 0) pending_note = jid;
                 pending_index = 0;
             }

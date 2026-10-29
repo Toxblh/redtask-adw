@@ -195,6 +195,13 @@ namespace Redmine {
             inner.show_content = true;
         }
 
+        /** Веха, страница вики — в колонке задачи, «назад» вернёт к прежнему. */
+        public void open_content (Adw.NavigationPage page) {
+            if (App.get ().session == null) return;
+            issue_nav.push (page);
+            inner.show_content = true;
+        }
+
         /** Ссылка своего сервера: пришедшая снаружи (App.open_uri) или из текста задачи (from_issue). */
         public void open_link (ServerLink l, bool from_issue = false) {
             switch (l.kind) {
@@ -206,13 +213,19 @@ namespace Redmine {
                     new PersonCard (l.id).present (this);
                     break;
                 case LinkKind.PROJECT:
-                    open_project.begin (l.project);
+                    open_project.begin (l.project, l.tab);
+                    break;
+                case LinkKind.VERSION:
+                    open_content (new VersionPage (l.id));
+                    break;
+                case LinkKind.WIKI:
+                    open_content (new WikiPage (l.project, l.title));
                     break;
             }
         }
 
         /** Проект по идентификатору из адреса (или номеру): из кэша списка проектов, иначе — с сервера. */
-        private async void open_project (string ident) {
+        private async void open_project (string ident, string tab) {
             var s = App.get ().session;
             if (s == null) return;
             Json.Object? found = null;
@@ -228,7 +241,7 @@ namespace Redmine {
             }
             if (found == null) return;
             show_section ("projects");
-            push_list (new ProjectIssuesPage (jint (found, "id"), jstr (found, "name")));
+            push_list (new ProjectPage (jint (found, "id"), jstr (found, "name"), tab));
         }
 
         public void new_issue (int project_id, int parent_id) {

@@ -1210,3 +1210,75 @@ msgstr "Текст скопирован"
 
 msgid "Copy Comment _Link"
 msgstr "Копировать _ссылку на комментарий"
+
+msgid "All Projects"
+msgstr "Все проекты"
+
+msgid "Overview"
+msgstr "Обзор"
+
+msgid "Versions"
+msgstr "Вехи"
+
+msgid "Wiki"
+msgstr "Вики"
+
+msgid "Homepage"
+msgstr "Домашняя страница"
+
+msgid "Parent project"
+msgstr "Родительский проект"
+
+msgid "Identifier"
+msgstr "Идентификатор"
+
+msgid "open"
+msgstr "открыта"
+
+msgid "locked"
+msgstr "заблокирована"
+
+msgid "closed"
+msgstr "закрыта"
+
+msgid "No versions"
+msgstr "Вех нет"
+
+msgid "No wiki pages"
+msgstr "Страниц вики нет"
+
+msgid "No files"
+msgstr "Файлов нет"
+
+msgid "List"
+msgstr "Список"
+
+msgid "Board"
+msgstr "Доска"
+
+#, c-format
+msgid "Due %s"
+msgstr "Срок %s"
+
+msgid "All assignees"
+msgstr "Все исполнители"
+
+msgid "Me"
+msgstr "Я"
+
+msgid "Open in Browser"
+msgstr "Открыть в браузере"
+
+#, c-format
+msgid "version %d"
+msgstr "версия %d"
+
+#, c-format
+msgid "%d of %d closed"
+msgid_plural "%d of %d closed"
+msgstr[0] "%d из %d закрыто"
+msgstr[1] "%d из %d закрыто"
+msgstr[2] "%d из %d закрыто"
+
+msgid "Favorite Projects"
+msgstr "Избранные"
