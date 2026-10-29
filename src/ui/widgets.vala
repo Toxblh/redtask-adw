@@ -350,8 +350,15 @@ namespace Redmine {
     async bool show_in_sushi (string path) {
         try {
             var bus = yield Bus.get (BusType.SESSION);
-            yield bus.call ("org.gnome.NautilusPreviewer", "/org/gnome/NautilusPreviewer", "org.gnome.NautilusPreviewer2", "ShowFile",
-                new Variant ("(ssb)", File.new_for_path (path).get_uri (), "", false), null, DBusCallFlags.NONE, 10000, null);
+            var uri = File.new_for_path (path).get_uri ();
+            // Sushi 47+: (uri, окно, закрыть-если-открыт, токен активации); раньше — без токена
+            try {
+                yield bus.call ("org.gnome.NautilusPreviewer", "/org/gnome/NautilusPreviewer", "org.gnome.NautilusPreviewer2", "ShowFile",
+                    new Variant ("(ssbs)", uri, "", false, ""), null, DBusCallFlags.NONE, 10000, null);
+            } catch (DBusError.INVALID_ARGS e) {
+                yield bus.call ("org.gnome.NautilusPreviewer", "/org/gnome/NautilusPreviewer", "org.gnome.NautilusPreviewer2", "ShowFile",
+                    new Variant ("(ssb)", uri, "", false), null, DBusCallFlags.NONE, 10000, null);
+            }
             return true;
         } catch (Error e) {
             return false;
