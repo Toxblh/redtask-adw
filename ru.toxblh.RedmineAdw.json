@@ -9,7 +9,8 @@
     "--share=ipc",
     "--socket=wayland",
     "--socket=fallback-x11",
-    "--device=dri"
+    "--device=dri",
+    "--talk-name=org.gnome.NautilusPreviewer"
   ],
   "cleanup": ["/include", "/lib/pkgconfig", "/share/vala", "*.la", "*.a"],
   "modules": [

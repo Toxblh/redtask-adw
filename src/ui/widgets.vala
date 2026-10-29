@@ -319,7 +319,7 @@ namespace Redmine {
         return best;
     }
 
-    /** Открыть вложение: картинка — в своём просмотре, остальное — скачать во временный каталог и системным приложением. */
+    /** Открыть вложение: картинка — в своём просмотре, остальное — скачать во временный каталог и показать в Sushi, без него — системным приложением. */
     public async void open_attachment (Gtk.Widget from, Json.Object att) {
         var name = jstr (att, "filename");
         var ct = jstr (att, "content_type");
@@ -338,10 +338,23 @@ namespace Redmine {
             var safe = Path.get_basename (name).replace ("/", "_");
             var path = Path.build_filename (dir, safe != "" ? safe : "file");
             FileUtils.set_data (path, b.get_data ());
+            if (yield show_in_sushi (path)) return;
             var launcher = new Gtk.FileLauncher (File.new_for_path (path));
             yield launcher.launch (w, null);
         } catch (Error e) {
             if (w != null && !(e is Gtk.DialogError)) w.toast (_("Could not open the file: %s").printf (e.message));
+        }
+    }
+
+    /** Предпросмотр в GNOME Sushi (как пробел в «Файлах»); false — Sushi нет или отказал, открываем системным приложением. */
+    async bool show_in_sushi (string path) {
+        try {
+            var bus = yield Bus.get (BusType.SESSION);
+            yield bus.call ("org.gnome.NautilusPreviewer", "/org/gnome/NautilusPreviewer", "org.gnome.NautilusPreviewer2", "ShowFile",
+                new Variant ("(ssb)", File.new_for_path (path).get_uri (), "", false), null, DBusCallFlags.NONE, 10000, null);
+            return true;
+        } catch (Error e) {
+            return false;
         }
     }
 
