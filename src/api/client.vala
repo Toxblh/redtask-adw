@@ -457,8 +457,9 @@ namespace Redmine {
             return new Issue (jobj (o, "issue"));
         }
 
+        /** Журналы и вложения (картинка уведомления — по ним). */
         public async Issue issue_journals (int id) throws Error {
-            var o = yield get_obj ("issues/%d.json".printf (id), new Query ().add ("include", "journals"));
+            var o = yield get_obj ("issues/%d.json".printf (id), new Query ().add ("include", "journals,attachments"));
             return new Issue (jobj (o, "issue"));
         }
 

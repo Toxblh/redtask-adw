@@ -222,8 +222,22 @@ namespace Redmine {
             cat.append (cl);
             col.append (cat);
             b.append (col);
+            if (e.image_id != 0) b.append (thumb (e.image_id));
             row.child = b;
             return row;
+        }
+
+        /** Миниатюра картинки события справа в строке истории. */
+        private Gtk.Widget thumb (int id) {
+            var pic = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, valign = Gtk.Align.CENTER, visible = false };
+            pic.add_css_class ("rich-image");
+            var att = new Json.Object ();
+            att.set_int_member ("id", id);
+            load_attachment_texture.begin (att, true, null, (o, r) => {
+                var t = load_attachment_texture.end (r);
+                if (t != null) { pic.paintable = t; pic.visible = true; }
+            });
+            return pic;
         }
 
         private Gtk.Widget group_row (NotifIssueGroup g) {

@@ -74,7 +74,7 @@ namespace Redmine {
                 var f = filter ();
                 var show = new GenericArray<NotifEntry> ();
                 foreach (var e in fresh) if (f.notifies (e)) show.add (e);
-                post (show, f);
+                yield post (show, f);
                 session.notifs.save_state (state);
                 p.s.set_int64 ("last-check", now);
                 debug ("poll ok: events=%u new=%u", entries.length, fresh.length);
@@ -239,6 +239,7 @@ namespace Redmine {
                 if (text == "") continue;
                 var cats = journal_types (j, s.user_id, login);
                 var e = entry (issue, at, who, text, cats[0], "j%d".printf (jint (j, "id")));
+                e.image_id = notification_image (jstr (j, "notes"), jarr (j, "details"), issue.attachments);
                 e.strong = yield strong (s, j, cats[0]);
                 for (int k = 1; k < cats.length; k++) e.also[cats[k]] = yield strong (s, j, cats[k]);
                 res.add (e);
@@ -491,7 +492,7 @@ namespace Redmine {
          * Системные уведомления: одно на задачу (строки копятся, новые сверху), действие по умолчанию —
          * открыть задачу на самом новом комментарии пачки, кнопка «Не уведомлять по задаче».
          */
-        public void post (GenericArray<NotifEntry> fresh, NotifFilter f) {
+        public async void post (GenericArray<NotifEntry> fresh, NotifFilter f) {
             if (fresh.length == 0) return;
             var app = App.get ();
             var by_issue = new HashTable<int, GenericArray<NotifEntry>> (direct_hash, direct_equal);
@@ -506,10 +507,11 @@ namespace Redmine {
                 var last = list[list.length - 1];
                 var sb = new StringBuilder ();
                 var group = NotifGroup.PROJECTS;
-                int note = 0;
+                int note = 0, image = 0;
                 for (int k = (int) list.length - 1; k >= 0; k--) {
                     foreach (var l in list[k].lines) sb.append (l + "\n");
-                    if (note == 0) note = list[k].journal_id;
+                    // картинка — только из самого свежего события-комментария
+                    if (note == 0) { note = list[k].journal_id; image = list[k].image_id; }
                     foreach (var t in f.notify_types (list[k])) if (group_of (t) < group) group = group_of (t);
                 }
                 // непрочитанное уведомление этой же задачи не затираем — дописываем его строки ниже новых
@@ -524,10 +526,36 @@ namespace Redmine {
                 n.set_category ("im.received");
                 n.set_default_action_and_target_value ("app.open-issue", new Variant ("(ii)", id, note));
                 n.add_button_with_target_value (_("Mute Issue"), "app.mute-issue", new Variant ("(is)", id, last.subject));
+                var icon = image != 0 ? yield thumbnail_file (image) : null;
+                if (icon != null) n.set_icon (new FileIcon (icon));
                 var nid = "issue-%d".printf (id);
                 app.send_notification (nid, n);
                 posted[id] = nid;
                 posted_text[id] = body;
+            }
+        }
+
+        /**
+         * Превью картинки для уведомления (attachments/thumbnail/{id}/400) файлом в кэше учётки. Большую картинку
+         * уведомления GNOME не показывают — она идёт иконкой. Дольше 10 с не ждём: тогда уведомление без картинки.
+         */
+        private async File? thumbnail_file (int id) {
+            var s = App.get ().session;
+            if (s == null) return null;
+            var f = File.new_for_path (Path.build_filename (s.cache.dir, "notif-thumb-%d".printf (id)));
+            if (f.query_exists ()) return f;
+            var c = new Cancellable ();
+            var t = Timeout.add_seconds (10, () => { c.cancel (); return Source.REMOVE; });
+            try {
+                var b = yield s.api.thumbnail (id, 400, c);
+                if (b == null) return null;
+                yield f.replace_contents_async (b.get_data (), null, false, FileCreateFlags.NONE, null, null);
+                return f;
+            } catch (Error e) {
+                debug ("notification thumbnail %d: %s", id, e.message);
+                return null;
+            } finally {
+                if (!c.is_cancelled ()) Source.remove (t);
             }
         }
 

@@ -121,6 +121,8 @@ namespace Redmine {
         /** Остальные категории того же события: тип → значимость. */
         public HashTable<string, bool> also = new HashTable<string, bool> (str_hash, str_equal);
         public string author = "";
+        /** Вложение-картинка события (notification_image), 0 — нет. */
+        public int image_id = 0;
 
         public string key { owned get { return "%d-%s".printf (issue_id, event_id != "" ? event_id : at.to_string ()); } }
 
@@ -157,6 +159,7 @@ namespace Redmine {
             foreach (var k in also.get_keys ()) al.set_boolean_member (k, also[k]);
             o.set_object_member ("alsoTypes", al);
             o.set_string_member ("author", author);
+            if (image_id != 0) o.set_int_member ("imageId", image_id);
             return o;
         }
 
@@ -177,6 +180,7 @@ namespace Redmine {
             var al = jobj (o, "alsoTypes");
             if (al != null) foreach (var k in al.get_members ()) e.also[k] = al.get_boolean_member (k);
             e.author = jstr (o, "author");
+            e.image_id = jint (o, "imageId");
             return e;
         }
     }
