@@ -102,13 +102,25 @@ namespace Redmine {
 
     public string human_size (int64 bytes) { return format_size ((uint64) bytes); }
 
-    /** Цитата для ответа: «Автор wrote:» и строки с «> ». */
-    public string quote_reply (string author, string text, string wrote) {
+    /**
+     * Цитата для ответа (набор quote_reply): «Автор писал(а) в #note-N:» для комментария, «Автор писал(а):» для
+     * описания (note = 0); строки с «> », пустая — «>». Пустой (одни пробелы) текст — null. lang — «ru» или «en».
+     */
+    public string? quote_reply (string author, int note, string text, string lang) {
+        var t = text.strip ();
+        if (t == "") return null;
+        var ru = lang.has_prefix ("ru");
         var sb = new StringBuilder ();
-        sb.append ("%s %s:\n".printf (author, wrote));
-        foreach (var l in text.strip ().split ("\n")) sb.append (l.strip () == "" ? ">\n" : "> " + l + "\n");
+        if (note > 0) sb.append ("%s %s #note-%d:\n".printf (author, ru ? "писал(а) в" : "wrote in", note));
+        else sb.append ("%s %s:\n".printf (author, ru ? "писал(а)" : "wrote"));
+        foreach (var l in t.split ("\n")) sb.append (l.strip () == "" ? ">\n" : "> " + l + "\n");
         sb.append ("\n");
         return sb.str;
+    }
+
+    /** Язык интерфейса для текстов, которые уходят на сервер (шапка цитаты): «ru» или «en». */
+    public string ui_lang () {
+        return Intl.get_language_names ()[0].has_prefix ("ru") ? "ru" : "en";
     }
 
     /** Ответ WAF вместо Redmine: просили JSON, пришёл HTML с 200 и без заголовка Rails. */

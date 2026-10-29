@@ -132,7 +132,7 @@ namespace Redmine {
                         show_warn (_("The private comment was not quoted: you may not write private notes, and a reply with its text would be visible to everyone. You can reply without the quote."));
                     } else {
                         if (reply_private) priv.active = true;
-                        var q = quote_reply (jstr (jobj (reply_to, "user"), "name"), jstr (reply_to, "notes"), _("wrote"));
+                        var q = quote_reply (jstr (jobj (reply_to, "user"), "name"), 0, jstr (reply_to, "notes"), ui_lang ()) ?? "";
                         var cur = editor.text.strip ();
                         editor.text = (cur != "" ? cur + "\n\n" : "") + q;
                     }

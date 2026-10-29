@@ -316,4 +316,25 @@ namespace Redmine {
         }
         return res;
     }
+
+    /**
+     * Картинка уведомления (набор notif_image): первая !имя! из текста, если это вложение-картинка задачи
+     * (имя без учёта регистра), иначе первое вложение-картинка из details журнала. 0 — картинки нет.
+     */
+    public int notification_image (string notes, GenericArray<Json.Object> details, GenericArray<Json.Object> attachments) {
+        MatchInfo mi;
+        try {
+            if (Textile.image_re ().match (notes, 0, out mi)) do {
+                var name = mi.fetch (1).down ();
+                foreach (var a in attachments)
+                    if (jstr (a, "filename").down () == name && jstr (a, "content_type").has_prefix ("image/")) return jint (a, "id");
+            } while (mi.next ());
+        } catch (RegexError e) {}
+        foreach (var d in details) {
+            if (jstr (d, "property") != "attachment") continue;
+            foreach (var a in attachments)
+                if (jstr (a, "id") == jstr (d, "name") && jstr (a, "content_type").has_prefix ("image/")) return jint (a, "id");
+        }
+        return 0;
+    }
 }

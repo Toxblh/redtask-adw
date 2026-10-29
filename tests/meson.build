@@ -5,3 +5,8 @@ foreach t : ['test_textile', 'test_logic']
     dependencies: test_deps)
   test(t, exe)
 endforeach
+
+spec_exe = executable('test_spec', ['test_spec.vala'] + core_sources,
+  vala_args: ['--target-glib=2.80', files('../src/config.vapi')],
+  dependencies: test_deps)
+test('test_spec', spec_exe, args: files('../spec/vectors.json'))

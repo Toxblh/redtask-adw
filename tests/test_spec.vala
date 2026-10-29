@@ -1,0 +1,162 @@
+/* Общие наборы spec/vectors.json (Android, iOS, GNOME): каждый раздел — против чистых функций ядра. */
+using Redmine;
+
+Json.Object spec;
+
+int[] ints (Json.Array a) {
+    int[] res = {};
+    foreach (var n in a.get_elements ()) res += (int) n.get_int ();
+    return res;
+}
+
+GenericArray<Json.Object> objs (Json.Array a) {
+    var res = new GenericArray<Json.Object> ();
+    foreach (var n in a.get_elements ()) res.add (n.get_object ());
+    return res;
+}
+
+/** null в наборе — 0 у функции. */
+int opt_int (Json.Object o, string key) {
+    return o.get_member (key).is_null () ? 0 : (int) o.get_int_member (key);
+}
+
+void test_status_kind () {
+    string[] kinds = { "todo", "in_progress", "done", "rejected" };
+    foreach (var c in objs (spec.get_array_member ("status_kind"))) {
+        var got = kinds[status_kind (c.get_string_member ("name"), c.get_boolean_member ("closed"))];
+        if (got != c.get_string_member ("kind")) error ("status_kind %s: %s", c.get_string_member ("name"), got);
+    }
+}
+
+void test_note_link () {
+    var v = spec.get_object_member ("note_link");
+    var journals = ints (v.get_array_member ("journals"));
+    var server = v.get_string_member ("server");
+    var issue = (int) v.get_int_member ("issue");
+    foreach (var c in objs (v.get_array_member ("links")))
+        assert_cmpstr (note_url (server, issue, journals, (int) c.get_int_member ("journal")), CompareOperator.EQ, c.get_string_member ("url"));
+    foreach (var c in objs (v.get_array_member ("fragments")))
+        assert_cmpint (journal_for_fragment (journals, c.get_string_member ("fragment")), CompareOperator.EQ, opt_int (c, "journal"));
+}
+
+void test_quote_reply () {
+    foreach (var c in objs (spec.get_object_member ("quote_reply").get_array_member ("cases"))) {
+        var got = quote_reply (c.get_string_member ("author"), opt_int (c, "note"), c.get_string_member ("text"), c.get_string_member ("lang"));
+        var want = c.get_member ("out").is_null () ? null : c.get_string_member ("out");
+        assert_cmpstr (got, CompareOperator.EQ, want);
+    }
+}
+
+void test_project_pins () {
+    var v = spec.get_object_member ("project_pins");
+    var got = pinned_projects (objs (v.get_array_member ("projects")), ints (v.get_array_member ("pins")));
+    var want = ints (v.get_array_member ("pinned"));
+    assert_cmpint (got.length, CompareOperator.EQ, want.length);
+    for (int k = 0; k < want.length; k++) assert_cmpint (jint (got[k], "id"), CompareOperator.EQ, want[k]);
+}
+
+void test_version_progress () {
+    foreach (var c in objs (spec.get_object_member ("version_progress").get_array_member ("cases"))) {
+        bool[] closed = {};
+        foreach (var n in c.get_array_member ("closed").get_elements ()) closed += n.get_boolean ();
+        int done, total;
+        var pct = version_progress (closed, out done, out total);
+        assert_cmpint (done, CompareOperator.EQ, (int) c.get_int_member ("done"));
+        assert_cmpint (total, CompareOperator.EQ, (int) c.get_int_member ("total"));
+        assert_cmpint (pct, CompareOperator.EQ, (int) c.get_int_member ("percent"));
+    }
+}
+
+/** Задачи набора → Issue: «assignee» набора — это assigned_to Redmine, «status» — id статуса. */
+GenericArray<Issue> issues_of (Json.Array a) {
+    var res = new GenericArray<Issue> ();
+    foreach (var c in objs (a)) {
+        var o = new Json.Object ();
+        o.set_int_member ("id", c.get_int_member ("id"));
+        if (c.has_member ("assignee") && !c.get_member ("assignee").is_null ()) o.set_object_member ("assigned_to", c.get_object_member ("assignee"));
+        if (c.has_member ("status")) {
+            var st = new Json.Object ();
+            st.set_int_member ("id", c.get_int_member ("status"));
+            o.set_object_member ("status", st);
+        }
+        res.add (new Issue (o));
+    }
+    return res;
+}
+
+void assert_ids (GenericArray<Issue> got, Json.Array want) {
+    var w = ints (want);
+    assert_cmpint (got.length, CompareOperator.EQ, w.length);
+    for (int k = 0; k < w.length; k++) assert_cmpint (got[k].id, CompareOperator.EQ, w[k]);
+}
+
+void test_assignee_filter () {
+    var v = spec.get_object_member ("assignee_filter");
+    var me = (int) v.get_int_member ("me");
+    var issues = issues_of (v.get_array_member ("issues"));
+    var got = assignee_options (issues, me);
+    var want = objs (v.get_array_member ("options"));
+    assert_cmpint (got.length, CompareOperator.EQ, want.length);
+    for (int k = 0; k < want.length; k++) {
+        assert_cmpstr (got[k].key, CompareOperator.EQ, want[k].get_string_member ("key"));
+        assert_cmpint (got[k].count, CompareOperator.EQ, (int) want[k].get_int_member ("count"));
+        if (want[k].has_member ("name")) assert_cmpstr (got[k].name, CompareOperator.EQ, want[k].get_string_member ("name"));
+    }
+    foreach (var c in objs (v.get_array_member ("select")))
+        assert_ids (filter_by_assignee (issues, c.get_string_member ("key"), me), c.get_array_member ("ids"));
+}
+
+void test_board_columns () {
+    var v = spec.get_object_member ("board_columns");
+    var got = board_columns (issues_of (v.get_array_member ("issues")), ints (v.get_array_member ("status_order")));
+    var want = objs (v.get_array_member ("columns"));
+    assert_cmpint (got.length, CompareOperator.EQ, want.length);
+    for (int k = 0; k < want.length; k++) {
+        assert_cmpint (got[k].status, CompareOperator.EQ, (int) want[k].get_int_member ("status"));
+        assert_ids (got[k].issues, want[k].get_array_member ("ids"));
+    }
+}
+
+void test_notif_image () {
+    var v = spec.get_object_member ("notif_image");
+    var atts = objs (v.get_array_member ("attachments"));
+    foreach (var c in objs (v.get_array_member ("cases")))
+        assert_cmpint (notification_image (c.get_string_member ("notes"), objs (c.get_array_member ("details")), atts), CompareOperator.EQ, opt_int (c, "image"));
+}
+
+void test_wiki_link () {
+    foreach (var c in objs (spec.get_object_member ("wiki_link").get_array_member ("cases"))) {
+        var l = Textile.wiki_link (c.get_string_member ("src"));
+        assert (l != null);
+        assert_cmpstr (l.project, CompareOperator.EQ, c.get_member ("project").is_null () ? null : c.get_string_member ("project"));
+        assert_cmpstr (l.title, CompareOperator.EQ, c.get_string_member ("title"));
+        assert_cmpstr (l.label, CompareOperator.EQ, c.get_string_member ("label"));
+        // в тексте — ссылкой вики, которую приложение открывает у себя
+        assert ("href=\"wiki:%s:%s\"".printf (l.project ?? "", Markup.escape_text (l.title)) in Textile.inline_markup ("см. " + c.get_string_member ("src")));
+    }
+}
+
+int main (string[] args) {
+    Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
+    Test.init (ref args);
+    var p = new Json.Parser ();
+    try {
+        p.load_from_file (args[args.length - 1]);
+    } catch (Error e) {
+        error ("vectors.json: %s", e.message);
+    }
+    spec = p.get_root ().get_object ();
+    // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
+    string[] known = { "_", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link" };
+    foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
+    Test.add_func ("/spec/status_kind", test_status_kind);
+    Test.add_func ("/spec/note_link", test_note_link);
+    Test.add_func ("/spec/quote_reply", test_quote_reply);
+    Test.add_func ("/spec/project_pins", test_project_pins);
+    Test.add_func ("/spec/version_progress", test_version_progress);
+    Test.add_func ("/spec/assignee_filter", test_assignee_filter);
+    Test.add_func ("/spec/board_columns", test_board_columns);
+    Test.add_func ("/spec/notif_image", test_notif_image);
+    Test.add_func ("/spec/wiki_link", test_wiki_link);
+    return Test.run ();
+}

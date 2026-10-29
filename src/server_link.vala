@@ -60,4 +60,26 @@ namespace Redmine {
             return p;
         }
     }
+
+    /** Ссылка на комментарий: {server}/issues/{id}#note-N, N — позиция журнала в issue.journals (с 1). */
+    public string note_url (string server, int issue, int[] journals, int journal_id) {
+        var base_url = server.has_suffix ("/") ? server.substring (0, server.length - 1) : server;
+        for (int k = 0; k < journals.length; k++)
+            if (journals[k] == journal_id) return "%s/issues/%d#note-%d".printf (base_url, issue, k + 1);
+        return "%s/issues/%d#change-%d".printf (base_url, issue, journal_id);
+    }
+
+    /** Фрагмент адреса → id журнала: note-N — по позиции, change-ID — по id; не нашли — 0. */
+    public int journal_for_fragment (int[] journals, string fragment) {
+        MatchInfo mi;
+        if (/^note-(\d+)$/.match (fragment, 0, out mi)) {
+            var n = int.parse (mi.fetch (1));
+            return n >= 1 && n <= journals.length ? journals[n - 1] : 0;
+        }
+        if (/^change-(\d+)$/.match (fragment, 0, out mi)) {
+            var id = int.parse (mi.fetch (1));
+            foreach (var j in journals) if (j == id) return id;
+        }
+        return 0;
+    }
 }

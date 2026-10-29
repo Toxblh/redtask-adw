@@ -341,4 +341,86 @@ namespace Redmine {
         var a = jint (r, "issue_id");
         return a == viewer_id ? jint (r, "issue_to_id") : a;
     }
+
+    // ---- проекты и вехи (наборы project_pins, version_progress, assignee_filter, board_columns) ----
+
+    private int by_name (string a, string b) { return a.casefold ().collate (b.casefold ()); }
+
+    /** Секция «Избранные»: существующие закреплённые проекты по имени; пропавшие с сервера — не показываются. */
+    public GenericArray<Json.Object> pinned_projects (GenericArray<Json.Object> projects, int[] pins) {
+        var res = new GenericArray<Json.Object> ();
+        foreach (var p in projects) foreach (var id in pins) if (jint (p, "id") == id) { res.add (p); break; }
+        res.sort ((a, b) => by_name (jstr (a, "name"), jstr (b, "name")));
+        return res;
+    }
+
+    /** Прогресс вехи по задачам: закрыто done из total, процент — с округлением вниз. */
+    public int version_progress (bool[] closed, out int done, out int total) {
+        done = 0;
+        foreach (var c in closed) if (c) done++;
+        total = closed.length;
+        return total == 0 ? 0 : done * 100 / total;
+    }
+
+    /** Вариант фильтра «Исполнитель»: all, me, user:ID (с именем), none. */
+    public class AssigneeOption : Object {
+        public string key;
+        public string name;
+        public int count;
+        public AssigneeOption (string key, string name, int count) { this.key = key; this.name = name; this.count = count; }
+    }
+
+    private string assignee_key (Issue i, int me) {
+        var a = i.assigned_to;
+        if (a == null) return "none";
+        return a.id == me ? "me" : "user:%d".printf (a.id);
+    }
+
+    public GenericArray<AssigneeOption> assignee_options (GenericArray<Issue> issues, int me) {
+        var people = new HashTable<string, AssigneeOption> (str_hash, str_equal);
+        int mine = 0, none = 0;
+        foreach (var i in issues) {
+            var k = assignee_key (i, me);
+            if (k == "me") mine++;
+            else if (k == "none") none++;
+            else if (people.contains (k)) people[k].count++;
+            else people[k] = new AssigneeOption (k, i.assigned_to.name, 1);
+        }
+        var others = new GenericArray<AssigneeOption> ();
+        foreach (var o in people.get_values ()) others.add (o);
+        others.sort ((a, b) => by_name (a.name, b.name));
+        var res = new GenericArray<AssigneeOption> ();
+        res.add (new AssigneeOption ("all", "", issues.length));
+        if (mine > 0) res.add (new AssigneeOption ("me", "", mine));
+        foreach (var o in others) res.add (o);
+        if (none > 0) res.add (new AssigneeOption ("none", "", none));
+        return res;
+    }
+
+    public GenericArray<Issue> filter_by_assignee (GenericArray<Issue> issues, string key, int me) {
+        var res = new GenericArray<Issue> ();
+        foreach (var i in issues) if (key == "all" || assignee_key (i, me) == key) res.add (i);
+        return res;
+    }
+
+    /** Колонка доски: статус и его задачи в прежнем порядке. */
+    public class BoardColumn : Object {
+        public int status;
+        public GenericArray<Issue> issues = new GenericArray<Issue> ();
+    }
+
+    /** Колонка на каждый статус с задачами, в порядке issue_statuses сервера; неизвестные статусы — в конце. */
+    public GenericArray<BoardColumn> board_columns (GenericArray<Issue> issues, int[] status_order) {
+        var cols = new HashTable<int, BoardColumn> (direct_hash, direct_equal);
+        int[] seen = {};
+        foreach (var i in issues) {
+            var st = i.status.id;
+            if (!cols.contains (st)) { cols[st] = new BoardColumn () { status = st }; seen += st; }
+            cols[st].issues.add (i);
+        }
+        var res = new GenericArray<BoardColumn> ();
+        foreach (var st in status_order) if (cols.contains (st)) { res.add (cols[st]); cols.remove (st); }
+        foreach (var st in seen) if (cols.contains (st)) res.add (cols[st]);
+        return res;
+    }
 }

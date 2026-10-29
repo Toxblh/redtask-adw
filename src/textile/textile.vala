@@ -21,7 +21,7 @@ namespace Textile {
     private Regex? _sup; private Regex? _sub; private Regex? _code; private Regex? _macro; private Regex? _img;
     private Regex? _hr; private Regex? _heading; private Regex? _list; private Regex? _bq; private Regex? _collapse;
     private Regex? _toc; private Regex? _entity; private Regex? _preopen; private Regex? _codetag; private Regex? _cellmod;
-    private Regex? _cellspan; private Regex? _rowspan; private Regex? _email; private Regex? _fnref; private Regex? _fn; private Regex? _color;
+    private Regex? _cellspan; private Regex? _rowspan; private Regex? _wiki; private Regex? _email; private Regex? _fnref; private Regex? _fn; private Regex? _color;
 
     private Regex re (string p, RegexCompileFlags f = 0) {
         try {
@@ -40,6 +40,7 @@ namespace Textile {
         _userref = re ("(?<![" + W + "/#:.@-])user(?:#(\\d+)|:(" + LOGIN + "))(?![" + W + "])");
         _tlink = re ("\"([^\"\\n]+)\":((?:https?|ftp)://[^\\s<>\"']+|mailto:[^\\s<>\"']+|/[^\\s<>\"']*)");
         _url = re ("https?://[^\\s<>\"']+");
+        _wiki = re ("\\[\\[[^\\[\\]\\n]+\\]\\]");
         _email = re ("(?<![" + W + ".+\\-@])[A-Za-z0-9_.+\\-]+@[A-Za-z0-9\\-]+(?:\\.[A-Za-z0-9\\-]+)*\\.[A-Za-z]{2,}(?![" + W + "@])");
         // ссылка на сноску: «текст[1]» — сразу за непробелом; сама сноска — строка «fn1. текст»
         _fnref = re ("(?<=[^\\s\\[])\\[(\\d{1,3})\\]");
@@ -76,6 +77,31 @@ namespace Textile {
     }
 
     public Regex mention_re () { init (); return _mention; }
+
+    /** Ссылка вики [[проект:Страница#якорь|Текст]]: project = null — текущий проект, title — с «_» вместо пробелов. */
+    public class WikiLink : Object {
+        public string? project = null;
+        public string title;
+        public string label;
+    }
+
+    public WikiLink? wiki_link (string src) {
+        var s = src.strip ();
+        if (!s.has_prefix ("[[") || !s.has_suffix ("]]")) return null;
+        var body = s.substring (2, s.length - 4);
+        var l = new WikiLink ();
+        var bar = body.index_of ("|");
+        var target = bar < 0 ? body : body.substring (0, bar);
+        var colon = target.index_of (":");
+        if (colon > 0) { l.project = target.substring (0, colon).strip (); target = target.substring (colon + 1); }
+        var hash = target.index_of ("#");
+        if (hash >= 0) target = target.substring (0, hash);
+        target = target.strip ();
+        if (target == "") return null;
+        l.title = target.replace (" ", "_");
+        l.label = bar < 0 ? target : body.substring (bar + 1).strip ();
+        return l;
+    }
     public Regex image_re () { init (); return _img; }
 
     // ---- «инертные» символы: содержимое <notextile> и раскодированные сущности уводим в Private Use Area ----
@@ -765,6 +791,11 @@ namespace Textile {
         if (_fnref.match (line, 0, out mi)) do {
             mi.fetch_pos (0, out s, out e);
             if (free (spans, s)) spans.add (new Span (s, e, "fnref", mi.fetch (1)));
+        } while (next (mi));
+        if (_wiki.match (line, 0, out mi)) do {
+            mi.fetch_pos (0, out s, out e);
+            var w = wiki_link (mi.fetch (0));
+            if (w != null && free (spans, s)) spans.add (new Span (s, e, "url", w.label, "wiki:" + (w.project ?? "") + ":" + w.title));
         } while (next (mi));
         if (_url.match (line, 0, out mi)) do {
             mi.fetch_pos (0, out s, out e);
