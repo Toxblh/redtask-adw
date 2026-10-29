@@ -261,6 +261,14 @@ namespace Redmine {
         public double total_spent_hours { get { return jdouble (o, "total_spent_hours"); } }
 
         public GenericArray<Json.Object> journals { owned get { return jarr (o, "journals"); } }
+        /** id журналов по порядку: позиция + 1 — номер комментария #note-N. */
+        public int[] journal_ids {
+            owned get {
+                int[] res = {};
+                foreach (var j in journals) res += jint (j, "id");
+                return res;
+            }
+        }
         public GenericArray<Json.Object> attachments { owned get { return jarr (o, "attachments"); } }
         public GenericArray<Json.Object> children { owned get { return jarr (o, "children"); } }
         public GenericArray<Json.Object> relations { owned get { return jarr (o, "relations"); } }

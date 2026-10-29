@@ -17,12 +17,16 @@ namespace Redmine {
         private string text;
         private GenericArray<Json.Object> atts;
         private int quote_depth = 0;
+        private bool quotable;
         /** Ссылка #note-K на комментарий этой же задачи: K — порядковый номер записи журнала. */
         public signal void note_activated (int note);
+        /** «Ответить с цитатой» в меню выделения (quotable): выделенный текст, как он виден на экране. */
+        public signal void quote_selected (string text);
 
-        public RichText (string text, GenericArray<Json.Object>? attachments = null) {
+        public RichText (string text, GenericArray<Json.Object>? attachments = null, bool quotable = false) {
             Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
             this.text = text;
+            this.quotable = quotable;
             atts = attachments ?? new GenericArray<Json.Object> ();
             init_caches ();
             render ();
@@ -131,6 +135,7 @@ namespace Redmine {
                     if (flow == null) {
                         flow = new FlowView (quote_depth > 0) { margin_top = gap };
                         flow.link_activated.connect (on_link);
+                        if (quotable) { flow.enable_quote (); flow.quote_selected.connect ((t) => quote_selected (t)); }
                         into.append (flow);
                         gap = 0;
                     }
@@ -635,17 +640,39 @@ namespace Redmine {
             }
         }
 
-        /** Ctrl+C и «Копировать»: пилюли упоминаний — их именами, а не U+FFFC. */
-        public override void copy_clipboard () {
+        /** Выделенное, как видно на экране: пилюли упоминаний — их именами, а не U+FFFC. */
+        private string selected_text () {
             Gtk.TextIter a, z;
-            if (!buffer.get_selection_bounds (out a, out z)) return;
+            if (!buffer.get_selection_bounds (out a, out z)) return "";
             var sb = new StringBuilder ();
             for (var it = a; it.compare (z) < 0; it.forward_char ()) {
                 var anc = it.get_child_anchor ();
                 if (anc != null) sb.append (anc.get_data<string> ("name") ?? "");
                 else if (it.get_char () != 0x200B) sb.append_unichar (it.get_char ());
             }
-            get_clipboard ().set_text (sb.str);
+            return sb.str;
+        }
+
+        public override void copy_clipboard () {
+            if (buffer.has_selection) get_clipboard ().set_text (selected_text ());
+        }
+
+        public signal void quote_selected (string text);
+
+        /** Пункт «Ответить с цитатой» в контекстном меню, пока есть выделение. */
+        public void enable_quote () {
+            var a = new SimpleAction ("quote", null);
+            a.set_enabled (false);
+            a.activate.connect (() => quote_selected (selected_text ()));
+            buffer.notify["has-selection"].connect (() => a.set_enabled (buffer.has_selection));
+            var g = new SimpleActionGroup ();
+            g.add_action (a);
+            insert_action_group ("rich", g);
+            var item = new MenuItem (_("_Reply with Quote"), "rich.quote");
+            item.set_attribute_value ("hidden-when", new Variant.string ("action-disabled"));
+            var m = new Menu ();
+            m.append_item (item);
+            extra_menu = m;
         }
 
         private string? href_of (int offset) {

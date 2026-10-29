@@ -310,9 +310,6 @@ msgstr "Не удалось узнать, можно ли вам менять п
 msgid "The private comment was not quoted: you may not write private notes, and a reply with its text would be visible to everyone. You can reply without the quote."
 msgstr "Приватный комментарий не процитирован: у вас нет права писать приватные заметки, и ответ с его текстом был бы виден всем. Ответить без цитаты можно."
 
-msgid "wrote"
-msgstr "написал(а)"
-
 msgid "Attach Files…"
 msgstr "Прикрепить файлы…"
 
@@ -1204,3 +1201,12 @@ msgstr "Установить Switchyard"
 
 msgid "Link router: opens links of chosen domains in chosen apps"
 msgstr "Маршрутизатор ссылок: открывает ссылки выбранных доменов в выбранных приложениях"
+
+msgid "Copy _Text"
+msgstr "Копировать _текст"
+
+msgid "Text copied"
+msgstr "Текст скопирован"
+
+msgid "Copy Comment _Link"
+msgstr "Копировать _ссылку на комментарий"

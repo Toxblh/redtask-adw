@@ -64,6 +64,7 @@ namespace Redmine {
         private HashTable<string, HashTable<string, string>> names = new HashTable<string, HashTable<string, string>> (str_hash, str_equal);
         private HashTable<int, Gtk.Widget> note_widgets = new HashTable<int, Gtk.Widget> (direct_hash, direct_equal);
         private HashTable<int, Issue> linked = new HashTable<int, Issue> (direct_hash, direct_equal);
+        private int[] jids = {};
 
         private Adw.WindowTitle wt;
         private StateView state;
@@ -284,7 +285,7 @@ namespace Redmine {
                 win ()?.toast (_("Issue number, subject and link copied"));
             });
             act ("open-browser").activate.connect (() => new Gtk.UriLauncher (link ()).launch.begin (win (), null));
-            act ("comment").activate.connect (() => open_comment (null, false));
+            act ("comment").activate.connect (() => open_comment (null));
             act ("log-time").activate.connect (() => open_time (null));
             act ("assign-me").activate.connect (confirm_assign);
             act ("edit").activate.connect (() => {
@@ -473,9 +474,9 @@ namespace Redmine {
             }
         }
 
-        private void open_comment (Json.Object? journal, bool reply) {
+        private void open_comment (Json.Object? editing, Json.Object? reply_to = null, string? quote = null) {
             if (issue == null) return;
-            var d = new CommentDialog (issue, can, reply ? null : journal, reply ? journal : null);
+            var d = new CommentDialog (issue, can, editing, reply_to, quote);
             d.sent.connect (() => { refresh (); ListsStale.mark (); });
             d.present (this);
         }
@@ -518,6 +519,7 @@ namespace Redmine {
             clear_box (body);
             note_widgets.remove_all ();
             var i = issue;
+            jids = i.journal_ids;
             RichText.learn (i);
             wt.title = "#%d".printf (i.id);
             wt.subtitle = i.project.name;
@@ -603,13 +605,18 @@ namespace Redmine {
 
             foreach (var cf in blocks) {
                 body.append (heading (jstr (cf, "name")));
-                body.append (rich_card (cf_display (labels, cf).replace ("\r\n", "\n").strip ()));
+                body.append (card (rich (cf_display (labels, cf).replace ("\r\n", "\n").strip ())));
             }
 
             // описание
             body.append (heading (_("Description")));
             if (i.description.strip () != "") {
-                body.append (rich_card (i.description));
+                var rt = rich (i.description, true);
+                rt.quote_selected.connect ((sel) => {
+                    var q = quote_reply (issue.author.name, 0, sel, ui_lang ());
+                    if (q != null) open_comment (null, null, q);
+                });
+                body.append (card (rt));
             } else {
                 var none = new Gtk.Label (_("No description")) { xalign = 0 };
                 none.add_css_class ("dim-label");
@@ -823,14 +830,11 @@ namespace Redmine {
             return "%s: %s → %s".printf (label, detail_value (name, ov), detail_value (name, nv));
         }
 
-        /** Textile в карточке — описание и длинные настраиваемые поля. */
-        private Gtk.Widget rich_card (string text) {
-            var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-            card.add_css_class ("card");
-            var rt = new RichText (text, issue.attachments) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
+        /** Textile описания и длинных настраиваемых полей; quotable — с «Ответить с цитатой» в меню выделения. */
+        private RichText rich (string text, bool quotable = false) {
+            var rt = new RichText (text, issue.attachments, quotable && can.has ("add_issue_notes")) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
             rt.note_activated.connect ((n) => reveal_note_index (n));
-            card.append (rt);
-            return card;
+            return rt;
         }
 
         private Gtk.Widget header_line (int user_id, string user, string when, string? extra, Gtk.Widget? menu) {
@@ -864,6 +868,10 @@ namespace Redmine {
             string? extra = is_private ? _("private note") : null;
             var upd = jstr (j, "updated_on");
             if (upd != "" && upd != jstr (j, "created_on") && notes && text != "") extra = (extra != null ? extra + " · " : "") + _("edited");
+            // #N — позиция в issue.journals, как #note-N на сайте
+            int n = 0;
+            while (n < jids.length && jids[n] != jid) n++;
+            var when = format_datetime (jstr (j, "created_on")) + (n < jids.length ? " · #%d".printf (n + 1) : "");
             Gtk.MenuButton? mb = null;
             if (notes && text != "") {
                 mb = new Gtk.MenuButton () { icon_name = "view-more-symbolic", valign = Gtk.Align.CENTER, tooltip_text = _("Comment Menu") };
@@ -872,17 +880,24 @@ namespace Redmine {
                 var g = new SimpleActionGroup ();
                 var me = App.get ().session.user_id;
                 var reply = new SimpleAction ("reply", null);
-                reply.activate.connect (() => open_comment (j, true));
+                reply.activate.connect (() => quote_note (j, text));
                 reply.set_enabled (can.has ("add_issue_notes"));
                 g.add_action (reply);
                 m.append (_("_Reply with Quote"), "j.reply");
+                var copy_raw = new SimpleAction ("copy-text", null);
+                copy_raw.activate.connect (() => { copy_text (this, text); win ()?.toast (_("Text copied")); });
+                g.add_action (copy_raw);
+                m.append (_("Copy _Text"), "j.copy-text");
                 var copy = new SimpleAction ("copy", null);
-                copy.activate.connect (() => { copy_text (this, link () + "#change-%d".printf (jid)); win ()?.toast (_("Link copied")); });
+                copy.activate.connect (() => {
+                    copy_text (this, note_url (App.get ().session.server, issue_id, jids, jid));
+                    win ()?.toast (_("Link copied"));
+                });
                 g.add_action (copy);
-                m.append (_("Copy _Link"), "j.copy");
+                m.append (_("Copy Comment _Link"), "j.copy");
                 if (can.has_own ("edit_issue_notes", "edit_own_issue_notes", user.id == me, user.id == me)) {
                     var edit = new SimpleAction ("edit", null);
-                    edit.activate.connect (() => open_comment (j, false));
+                    edit.activate.connect (() => open_comment (j));
                     g.add_action (edit);
                     m.append (_("_Edit"), "j.edit");
                     var del = new SimpleAction ("delete", null);
@@ -897,7 +912,17 @@ namespace Redmine {
                 mb.menu_model = m;
                 mb.insert_action_group ("j", g);
             }
-            box.append (header_line (user.id, user.name, format_datetime (jstr (j, "created_on")), extra, mb));
+            var head = header_line (user.id, user.name, when, extra, mb);
+            if (mb != null) {
+                // правый клик и долгое нажатие на шапку — то же меню «⋮»
+                var rc = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
+                rc.pressed.connect (() => mb.popup ());
+                head.add_controller (rc);
+                var lp = new Gtk.GestureLongPress () { touch_only = true, propagation_phase = Gtk.PropagationPhase.CAPTURE };
+                lp.pressed.connect (() => { lp.set_state (Gtk.EventSequenceState.CLAIMED); mb.popup (); });
+                head.add_controller (lp);
+            }
+            box.append (head);
             var inner = new Gtk.Box (Gtk.Orientation.VERTICAL, 4) { margin_start = 40 };
             if (details) foreach (var d in jarr (j, "details")) {
                 var l = new Gtk.Label (detail_text (d)) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
@@ -905,8 +930,9 @@ namespace Redmine {
                 inner.append (l);
             }
             if (notes && text != "") {
-                var rt = new RichText (text, issue.attachments);
-                rt.note_activated.connect ((n) => reveal_note_index (n));
+                var rt = new RichText (text, issue.attachments, can.has ("add_issue_notes"));
+                rt.note_activated.connect ((k) => reveal_note_index (k));
+                rt.quote_selected.connect ((sel) => quote_note (j, sel));
                 inner.append (rt);
                 // файлы, пришедшие с этим комментарием (details property=attachment, name — id вложения), —
                 // строками под текстом; удалённые потом из задачи не показываем: открывать там нечего
@@ -923,6 +949,15 @@ namespace Redmine {
             box.append (inner);
             note_widgets[jid] = box;
             return box;
+        }
+
+        /** Ответ с цитатой комментария: весь текст или выделение; шапка — со ссылкой #note-N. */
+        private void quote_note (Json.Object j, string text) {
+            var jid = jint (j, "id");
+            int n = 0;
+            while (n < jids.length && jids[n] != jid) n++;
+            var q = quote_reply ((Named.from (jobj (j, "user")) ?? new Named (0, _("Someone"))).name, n < jids.length ? n + 1 : 0, text, ui_lang ());
+            if (q != null) open_comment (null, j, q);
         }
 
         private Gtk.Widget time_widget (Json.Object t) {
@@ -1013,8 +1048,8 @@ namespace Redmine {
         private void scroll_to_note () {
             // ponytail: номер считаем по видимому нам журналу — чужие приватные записи сдвигают его на сайте
             if (pending_index > 0 && issue != null && issue.full) {
-                var js = issue.journals;
-                if (pending_index <= js.length) pending_note = jint (js[pending_index - 1], "id");
+                var jid = journal_for_fragment (issue.journal_ids, "note-%d".printf (pending_index));
+                if (jid != 0) pending_note = jid;
                 pending_index = 0;
             }
             var note = pending_note;

@@ -361,6 +361,14 @@ namespace Redmine {
         }
     }
 
+    /** Виджет в карточке (.card): текст описания, вики, обзора проекта. */
+    public Gtk.Widget card (Gtk.Widget w) {
+        var c = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
+        c.add_css_class ("card");
+        c.append (w);
+        return c;
+    }
+
     /** Подпись-заголовок раздела внутри страницы. */
     public Gtk.Label heading (string text) {
         var l = new Gtk.Label (text) { xalign = 0, margin_top = 18, margin_bottom = 6 };

@@ -81,7 +81,7 @@ namespace Redmine {
     private HashTable<int, string>? drafts = null;
 
     /**
-     * Комментарий: новый, ответ с цитатой (reply_to) или правка своего (editing). Охрана приватности как в
+     * Комментарий: новый, ответ с цитатой quote (из комментария reply_to или описания) или правка своего (editing). Охрана приватности как в
      * Android: цитата приватного комментария без права на приватные заметки не вставляется (ушла бы публично),
      * а «приватный» комментарий без этого права не отправляется.
      */
@@ -97,7 +97,7 @@ namespace Redmine {
         private Gtk.ListBox files_list;
         private bool sent_ok = false;
 
-        public CommentDialog (Issue issue, Perms can, Json.Object? editing, Json.Object? reply_to) {
+        public CommentDialog (Issue issue, Perms can, Json.Object? editing, Json.Object? reply_to = null, string? quote = null) {
             this.issue = issue;
             this.can = can;
             this.editing = editing;
@@ -126,15 +126,14 @@ namespace Redmine {
                 else if (st < 0) show_warn (_("Could not find out whether you may change the private flag. If not, the server will keep it as it was."));
             } else {
                 editor.text = drafts[issue.id] ?? "";
-                if (reply_to != null) {
-                    var reply_private = jbool (reply_to, "private_notes");
+                if (quote != null) {
+                    var reply_private = reply_to != null && jbool (reply_to, "private_notes");
                     if (reply_private && can.state ("set_notes_private") == 0) {
                         show_warn (_("The private comment was not quoted: you may not write private notes, and a reply with its text would be visible to everyone. You can reply without the quote."));
                     } else {
                         if (reply_private) priv.active = true;
-                        var q = quote_reply (jstr (jobj (reply_to, "user"), "name"), 0, jstr (reply_to, "notes"), ui_lang ()) ?? "";
                         var cur = editor.text.strip ();
-                        editor.text = (cur != "" ? cur + "\n\n" : "") + q;
+                        editor.text = (cur != "" ? cur + "\n\n" : "") + quote;
                     }
                 }
                 files_list = boxed_list ();
