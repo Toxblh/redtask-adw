@@ -20,7 +20,7 @@ namespace Redmine {
 
             var group = new Adw.PreferencesGroup ();
             server_row = new Adw.EntryRow () { title = _("Server Address"), input_purpose = Gtk.InputPurpose.URL };
-            server_row.text = Prefs.get_default ().server_url != "" ? Prefs.get_default ().server_url : "https://my.basealt.space";
+            server_row.text = Prefs.get_default ().server_url;
             group.add (server_row);
             box.append (group);
 
@@ -28,6 +28,8 @@ namespace Redmine {
             web_button.add_css_class ("pill");
             web_button.add_css_class ("suggested-action");
             web_button.clicked.connect (on_web);
+            web_button.sensitive = server_row.text.strip () != "";
+            server_row.changed.connect (() => web_button.sensitive = server_row.text.strip () != "");
             box.append (web_button);
 
             var manual = new Adw.PreferencesGroup () {
