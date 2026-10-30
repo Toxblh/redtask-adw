@@ -160,7 +160,8 @@ int main (string[] args) {
     }
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
-    string[] known = { "_", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail" };
+    // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
+    string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
