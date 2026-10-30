@@ -136,6 +136,19 @@ void test_wiki_link () {
     }
 }
 
+void test_thumbnail_source () {
+    foreach (var c in objs (spec.get_object_member ("thumbnail_source").get_array_member ("cases")))
+        assert_cmpstr (thumbnail_source (c.get_string_member ("filename"), c.get_string_member ("content_type")), CompareOperator.EQ, c.get_string_member ("source"));
+}
+
+void test_embedded_thumbnail () {
+    foreach (var c in objs (spec.get_object_member ("embedded_thumbnail").get_array_member ("cases"))) {
+        var got = embedded_thumbnail (new Bytes (Base64.decode (c.get_string_member ("zip"))));
+        var want = c.get_member ("out").is_null () ? null : c.get_string_member ("out");
+        assert_cmpstr (got == null ? null : Base64.encode (got.get_data ()), CompareOperator.EQ, want);
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -147,7 +160,7 @@ int main (string[] args) {
     }
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
-    string[] known = { "_", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link" };
+    string[] known = { "_", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -158,5 +171,7 @@ int main (string[] args) {
     Test.add_func ("/spec/board_columns", test_board_columns);
     Test.add_func ("/spec/notif_image", test_notif_image);
     Test.add_func ("/spec/wiki_link", test_wiki_link);
+    Test.add_func ("/spec/thumbnail_source", test_thumbnail_source);
+    Test.add_func ("/spec/embedded_thumbnail", test_embedded_thumbnail);
     return Test.run ();
 }

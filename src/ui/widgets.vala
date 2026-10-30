@@ -259,6 +259,9 @@ namespace Redmine {
         }
     }
 
+    /** Сервер ответил «миниатюры нет» (404 и т. п.) — не спрашиваем снова до перезапуска. */
+    GenericSet<int>? no_thumb = null;
+
     /** Картинка вложения по content_url (с ключом) — для превью в тексте и в списке файлов. */
     public async Gdk.Texture? load_attachment_texture (Json.Object att, bool thumb, Cancellable? c = null) {
         var s = App.get ().session;
@@ -266,15 +269,47 @@ namespace Redmine {
         var id = jint (att, "id");
         var key = (thumb ? "thumb-%d" : "att-%d").printf (id);
         var cached = s.cache.load_bytes (key);
+        if (no_thumb == null) no_thumb = new GenericSet<int> (direct_hash, direct_equal);
         try {
             if (cached != null) return Gdk.Texture.from_bytes (cached);
+            if (thumb && id in no_thumb) return null;
             Bytes? b = thumb ? yield s.api.thumbnail (id, 200, c) : yield s.api.download (jstr (att, "content_url"), c);
-            if (b == null) return null;
+            if (b == null) {
+                if (thumb) no_thumb.add (id);
+                return null;
+            }
             s.cache.save_bytes (key, b);
             return Gdk.Texture.from_bytes (b);
         } catch (Error e) {
             debug ("attachment %d: %s", id, e.message);
             return null;
+        }
+    }
+
+    /** Куда open_attachment кладёт скачанный файл. */
+    string open_path (Json.Object att) {
+        var safe = Path.get_basename (jstr (att, "filename")).replace ("/", "_");
+        return Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", "open", jint (att, "id").to_string (), safe != "" ? safe : "file");
+    }
+
+    /** Миниатюра, встроенная в уже скачанный документ (spec 4.1); файла нет — null. Разбор zip — в отдельном потоке. */
+    async Gdk.Texture? load_embedded_thumbnail (Json.Object att) {
+        var s = App.get ().session;
+        if (s == null) return null;
+        var key = "thumb-%d".printf (jint (att, "id"));
+        Bytes? b = s.cache.load_bytes (key);
+        try {
+            if (b == null) {
+                var data = yield File.new_for_path (open_path (att)).load_bytes_async (null, null);
+                SourceFunc cb = load_embedded_thumbnail.callback;
+                new Thread<void> ("thumb", () => { b = embedded_thumbnail (data); Idle.add ((owned) cb); });
+                yield;
+                if (b == null) return null;
+                s.cache.save_bytes (key, b);
+            }
+            return Gdk.Texture.from_bytes (b);
+        } catch (Error e) {
+            return null; // не скачан или миниатюра не читается — значок
         }
     }
 
@@ -288,15 +323,19 @@ namespace Redmine {
         };
         var icon = new Gtk.Image.from_icon_name (file_icon (name, jstr (att, "content_type"))) { pixel_size = 32 };
         row.add_prefix (icon);
-        if (jstr (att, "thumbnail_url") != "" || is_image_name (name)) {
-            var thumb = new Gtk.Picture () { width_request = 40, height_request = 40, content_fit = Gtk.ContentFit.COVER, visible = false };
-            load_attachment_texture.begin (att, true, null, (o, r) => {
-                var t = load_attachment_texture.end (r);
-                if (t != null) { thumb.paintable = t; thumb.visible = true; icon.visible = false; }
-            });
-            row.add_prefix (thumb);
-        }
-        row.activated.connect ((r) => open_attachment.begin (r, att));
+        var src = thumbnail_source (name, jstr (att, "content_type"));
+        var has_thumb = false;
+        AsyncReadyCallback show = (o, r) => {
+            var t = src == "server" ? load_attachment_texture.end (r) : load_embedded_thumbnail.end (r);
+            if (t != null) { icon.paintable = t; icon.pixel_size = 40; has_thumb = true; }
+        };
+        if (src == "server") load_attachment_texture.begin (att, true, null, show);
+        if (src == "embedded") load_embedded_thumbnail.begin (att, show);
+        row.activated.connect ((r) => open_attachment.begin (r, att, (o, res) => {
+            open_attachment.end (res);
+            // только что скачали документ — его миниатюра уже есть
+            if (src == "embedded" && !has_thumb) load_embedded_thumbnail.begin (att, show);
+        }));
         return row;
     }
 
@@ -333,10 +372,8 @@ namespace Redmine {
         var w = win_of (from);
         try {
             var b = yield s.api.download (jstr (att, "content_url"));
-            var dir = Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", "open", jint (att, "id").to_string ());
-            DirUtils.create_with_parents (dir, 0700);
-            var safe = Path.get_basename (name).replace ("/", "_");
-            var path = Path.build_filename (dir, safe != "" ? safe : "file");
+            var path = open_path (att);
+            DirUtils.create_with_parents (Path.get_dirname (path), 0700);
             FileUtils.set_data (path, b.get_data ());
             if (yield show_in_sushi (path)) return;
             var launcher = new Gtk.FileLauncher (File.new_for_path (path));

@@ -164,4 +164,68 @@ namespace Redmine {
         foreach (var id in local) if (id > 0 && !server.contains (id) && !seen.contains (id)) { seen.add (id); res += id; }
         return res;
     }
+
+    /** Откуда миниатюра в строке вложения (spec 4.1): "server" — картинки и PDF, "embedded" — ODF/OOXML из скачанного файла, иначе "none". */
+    public string thumbnail_source (string filename, string content_type) {
+        var n = filename.down ();
+        var ext = n.contains (".") ? n.substring (n.last_index_of (".") + 1) : "";
+        if (content_type.has_prefix ("image/") || content_type == "application/pdf"
+            || ext in new string[] { "png", "jpg", "jpeg", "jpe", "gif", "bmp", "webp", "pdf" }) return "server";
+        if (ext in new string[] { "odt", "ods", "odp", "odg", "docx", "xlsx", "pptx" }) return "embedded";
+        return "none";
+    }
+
+    uint32 le (uint8[] d, size_t at, int n) {
+        uint32 v = 0;
+        for (int k = n - 1; k >= 0; k--) v = (v << 8) | d[at + k];
+        return v;
+    }
+
+    /** Встроенная миниатюра ODF/OOXML (spec 4.1): zip по центральному каталогу, stored и deflate; нет или не zip — null. */
+    public Bytes? embedded_thumbnail (Bytes data) {
+        unowned uint8[] d = data.get_data ();
+        size_t len = d.length;
+        if (len < 22) return null;
+        // конец центрального каталога: с конца, комментарий до 64 КБ
+        size_t eocd = 0;
+        bool found = false;
+        for (size_t at = len - 22; ; at--) {
+            if (le (d, at, 4) == 0x06054b50) { eocd = at; found = true; break; }
+            if (at == 0 || len - at > 22 + 65535) break;
+        }
+        if (!found) return null;
+        var count = le (d, eocd + 10, 2);
+        size_t at = le (d, eocd + 16, 4);
+        string[] want = { "Thumbnails/thumbnail.png", "docProps/thumbnail.jpeg", "docProps/thumbnail.jpg", "docProps/thumbnail.png" };
+        int best = want.length;
+        uint32 method = 0, csize = 0, usize = 0, local = 0;
+        for (uint k = 0; k < count; k++) {
+            if (at + 46 > len || le (d, at, 4) != 0x02014b50) return null;
+            var nlen = le (d, at + 28, 2);
+            if (at + 46 + nlen > len) return null;
+            for (int w = 0; w < best; w++) if (nlen == want[w].length && Memory.cmp (&d[at + 46], want[w], nlen) == 0) {
+                best = w;
+                method = le (d, at + 10, 2);
+                csize = le (d, at + 20, 4);
+                usize = le (d, at + 24, 4);
+                local = le (d, at + 42, 4);
+            }
+            at += 46 + nlen + le (d, at + 30, 2) + le (d, at + 32, 2);
+        }
+        if (best == want.length || (size_t) local + 30 > len || le (d, local, 4) != 0x04034b50) return null;
+        size_t start = (size_t) local + 30 + le (d, local + 26, 2) + le (d, local + 28, 2);
+        if (start + csize > len) return null;
+        var raw = new Bytes (d[start : start + csize]);
+        if (method == 0) return raw;
+        if (method != 8) return null;
+        try {
+            var conv = new ConverterInputStream (new MemoryInputStream.from_bytes (raw), new ZlibDecompressor (ZlibCompressorFormat.RAW));
+            var out = new MemoryOutputStream.resizable ();
+            out.splice (conv, OutputStreamSpliceFlags.CLOSE_SOURCE | OutputStreamSpliceFlags.CLOSE_TARGET);
+            var res = out.steal_as_bytes ();
+            return res.get_size () == usize ? res : null;
+        } catch (Error e) {
+            return null;
+        }
+    }
 }
