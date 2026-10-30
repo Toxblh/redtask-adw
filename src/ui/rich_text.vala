@@ -196,6 +196,9 @@ namespace Redmine {
             var grid = new Gtk.Grid () { column_spacing = 0, row_spacing = 0 };
             grid.add_css_class ("rich-table");
             Textile.layout_table (b.lines);
+            bool spans = false;
+            foreach (var l in b.lines) foreach (var c in l.cells) spans = spans || c.span > 1 || c.rowspan > 1;
+            var cells = spans ? null : new TableCells ();
             int r = 0;
             foreach (var l in b.lines) {
                 foreach (var c in l.cells) {
@@ -215,18 +218,25 @@ namespace Redmine {
                         lb.hexpand = false;
                         lb.xalign = c.xalign;
                         lb.justify = just;
-                        lb.max_width_chars = 40;
-                        // без минимальной ширины прокрутка меряет высоту по ширине в букву — таблица вытягивается вниз пустотой
-                        lb.width_chars = int.min (c.text.char_count (), 40);
+                        if (cells != null) {
+                            // колонка не уже самого длинного слова (п. 7) — слово не рвём
+                            lb.wrap_mode = Pango.WrapMode.WORD;
+                        } else {
+                            lb.max_width_chars = 40;
+                            // без минимальной ширины прокрутка меряет высоту по ширине в букву — таблица вытягивается вниз пустотой
+                            lb.width_chars = int.min (c.text.char_count (), 40);
+                        }
                         cell = lb;
                     }
                     if (c.header) cell.add_css_class ("rich-th");
                     var cls = cell_class (c);
                     if (cls != null) cell.add_css_class (cls);
-                    grid.attach (cell, c.col, r, c.span, c.rowspan);
+                    if (cells != null) cells.add (cell, c.text, c.col, r);
+                    else grid.attach (cell, c.col, r, c.span, c.rowspan);
                 }
                 r++;
             }
+            if (cells != null) return new Table (cells);
             // не шире содержимого; не влезает — прокрутка вбок, рамка целиком внутри прокрутки
             return new Gtk.ScrolledWindow () {
                 child = grid, vscrollbar_policy = Gtk.PolicyType.NEVER, propagate_natural_height = true,
@@ -346,6 +356,175 @@ namespace Redmine {
      * клавиатурой, Ctrl+C и «Выделить всё» идут через все абзацы. Стили — общие теги, ссылки — смещения в буфере,
      * фон кода, полоса цитаты и линия рисуются под текстом (snapshot_layer).
      */
+    /**
+     * Таблица без объединённых ячеек (п. 7): колонки по Textile.table_columns от доступной ширины,
+     * не влезает и по самым длинным словам — прокрутка вбок. Высоту считает сама: прокрутка
+     * меряет ребёнка без ширины.
+     */
+    private class Table : Gtk.Widget {
+        private Gtk.ScrolledWindow scroll;
+        private TableCells cells;
+
+        public Table (TableCells cells) {
+            this.cells = cells;
+            scroll = new Gtk.ScrolledWindow () { child = cells, vscrollbar_policy = Gtk.PolicyType.NEVER };
+            scroll.set_parent (this);
+        }
+
+        public override Gtk.SizeRequestMode get_request_mode () { return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH; }
+
+        public override void measure (Gtk.Orientation o, int for_size, out int min, out int nat, out int mb, out int nb) {
+            int m, n;
+            scroll.measure (o, for_size, out m, out n, null, null);
+            mb = nb = -1;
+            if (o == Gtk.Orientation.HORIZONTAL) {
+                int cm, cn;
+                cells.measure (o, -1, out cm, out cn, null, null);
+                min = m;
+                nat = int.max (m, cn);
+            } else {
+                min = nat = cells.height_for (for_size);
+            }
+        }
+
+        public override void size_allocate (int w, int h, int baseline) { scroll.allocate (w, h, baseline, null); }
+
+        public override void dispose () {
+            scroll.unparent ();
+            base.dispose ();
+        }
+    }
+
+    /** Ячейки таблицы сеткой: ширины колонок — Textile.table_columns, высота строки — по самой высокой ячейке. */
+    private class TableCells : Gtk.Widget {
+        private GenericArray<Gtk.Widget> cells = new GenericArray<Gtk.Widget> ();
+        private string[] texts = {};
+        private int[] cols = {};
+        private int[] rows = {};
+        private int ncols = 0;
+        private int nrows = 0;
+        private double[]? mins = null;
+        private double[] maxs;
+
+        construct { add_css_class ("rich-table"); }
+
+        public void add (Gtk.Widget w, string text, int col, int row) {
+            w.set_parent (this);
+            cells.add (w);
+            texts += text;
+            cols += col;
+            rows += row;
+            ncols = int.max (ncols, col + 1);
+            nrows = int.max (nrows, row + 1);
+        }
+
+        /**
+         * min — самое длинное слово, max — вся ячейка; Pango шрифтом самой ячейки (у th он жирный из CSS).
+         * Не меньше собственного минимума ячейки: в нём разметка и упоминания-пилюли.
+         * ponytail: замер один раз — смена шрифта в системе не пересчитывает, до новой отрисовки текста.
+         */
+        private void measure_columns () {
+            if (mins != null) return;
+            mins = new double[ncols];
+            maxs = new double[ncols];
+            const int PAD = 17; // padding 4px 8px и рамка 1px в style.css (.rich-table > label)
+            for (int i = 0; i < cells.length; i++) {
+                var w = cells[i];
+                int cm, cn, pw, ph, word = 0;
+                w.measure (Gtk.Orientation.HORIZONTAL, -1, out cm, out cn, null, null);
+                var lay = w.create_pango_layout (texts[i]);
+                lay.get_pixel_size (out pw, out ph);
+                foreach (var t in texts[i].split (" ")) {
+                    int tw;
+                    lay.set_text (t, -1);
+                    lay.get_pixel_size (out tw, out ph);
+                    word = int.max (word, tw);
+                }
+                var c = cols[i];
+                mins[c] = double.max (mins[c], int.max (word + PAD, cm));
+                maxs[c] = double.max (maxs[c], double.max (pw + PAD, mins[c]));
+            }
+            for (int c = 0; c < ncols; c++) maxs[c] = double.max (maxs[c], mins[c]);
+        }
+
+        private int sum (double[] v) {
+            double s = 0;
+            foreach (var x in v) s += x;
+            return (int) Math.ceil (s);
+        }
+
+        /** Левые края колонок при ширине таблицы width; последний элемент — правый край. */
+        private int[] edges (int width) {
+            measure_columns ();
+            bool scroll;
+            var ws = Textile.table_columns (mins, maxs, int.max (width, sum (mins)), out scroll);
+            var xs = new int[ncols + 1];
+            double acc = 0;
+            for (int c = 0; c < ncols; c++) {
+                acc += ws[c];
+                xs[c + 1] = (int) Math.round (acc);
+            }
+            return xs;
+        }
+
+        private int[] row_heights (int[] xs) {
+            var hs = new int[nrows];
+            for (int i = 0; i < cells.length; i++) {
+                int m, n;
+                cells[i].measure (Gtk.Orientation.VERTICAL, xs[cols[i] + 1] - xs[cols[i]], out m, out n, null, null);
+                hs[rows[i]] = int.max (hs[rows[i]], m);
+            }
+            return hs;
+        }
+
+        private int content_height (int width) {
+            var hs = row_heights (edges (width));
+            int h = 0;
+            foreach (var x in hs) h += x;
+            return h;
+        }
+
+        /** Высота с рамкой таблицы (1px сверху и слева) при внешней ширине width; -1 — по самым длинным ячейкам. */
+        public int height_for (int width) {
+            measure_columns ();
+            return content_height (width < 0 ? sum (maxs) : width - 1) + 1;
+        }
+
+        public override Gtk.SizeRequestMode get_request_mode () { return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH; }
+
+        public override void measure (Gtk.Orientation o, int for_size, out int min, out int nat, out int mb, out int nb) {
+            measure_columns ();
+            mb = nb = -1;
+            if (o == Gtk.Orientation.HORIZONTAL) {
+                min = sum (mins);
+                nat = sum (maxs);
+            } else if (for_size < 0) {
+                // прокрутка меряет без ширины — высоту даёт Table по настоящей ширине
+                min = nat = 0;
+            } else {
+                min = nat = content_height (for_size);
+            }
+        }
+
+        public override void size_allocate (int w, int h, int baseline) {
+            var xs = edges (w);
+            var hs = row_heights (xs);
+            var ys = new int[nrows + 1];
+            for (int r = 0; r < nrows; r++) ys[r + 1] = ys[r] + hs[r];
+            for (int i = 0; i < cells.length; i++) {
+                var c = cols[i];
+                var r = rows[i];
+                cells[i].allocate (xs[c + 1] - xs[c], hs[r], -1, new Gsk.Transform ().translate ({ xs[c], ys[r] }));
+            }
+        }
+
+        public override void dispose () {
+            foreach (var w in cells) w.unparent ();
+            cells.length = 0;
+            base.dispose ();
+        }
+    }
+
     public class FlowView : Gtk.TextView {
         private const int QUOTE_INDENT = 13; // полоса 3 + отступ 10, как .rich-quote
         private const int MARK = 22;         // место под маркер списка

@@ -149,6 +149,23 @@ void test_embedded_thumbnail () {
     }
 }
 
+double[] doubles (Json.Array a) {
+    double[] res = {};
+    foreach (var n in a.get_elements ()) res += n.get_double ();
+    return res;
+}
+
+void test_table_columns () {
+    foreach (var c in objs (spec.get_object_member ("table_columns").get_array_member ("cases"))) {
+        bool scroll;
+        var got = Textile.table_columns (doubles (c.get_array_member ("min")), doubles (c.get_array_member ("max")), c.get_double_member ("avail"), out scroll);
+        var want = doubles (c.get_array_member ("widths"));
+        assert_cmpint (got.length, CompareOperator.EQ, want.length);
+        for (int i = 0; i < want.length; i++) assert_cmpfloat_with_epsilon (got[i], want[i], 0.01);
+        assert (scroll == c.get_boolean_member ("scroll"));
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -161,7 +178,7 @@ int main (string[] args) {
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
-    string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail" };
+    string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -174,5 +191,6 @@ int main (string[] args) {
     Test.add_func ("/spec/wiki_link", test_wiki_link);
     Test.add_func ("/spec/thumbnail_source", test_thumbnail_source);
     Test.add_func ("/spec/embedded_thumbnail", test_embedded_thumbnail);
+    Test.add_func ("/spec/table_columns", test_table_columns);
     return Test.run ();
 }

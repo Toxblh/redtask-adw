@@ -231,6 +231,24 @@ namespace Textile {
         }
     }
 
+    /**
+     * Ширины колонок как у браузера (PARITY 7): min — самое длинное слово, max — самая длинная ячейка.
+     * Всё влезает по max — остаток пропорционально max; по min — min + остаток пропорционально (max − min);
+     * не влезает и по min — по min и scroll.
+     */
+    public double[] table_columns (double[] min, double[] max, double avail, out bool scroll) {
+        double smin = 0, smax = 0;
+        foreach (var v in min) smin += v;
+        foreach (var v in max) smax += v;
+        scroll = smin > avail;
+        var res = new double[min.length];
+        for (int i = 0; i < min.length; i++)
+            res[i] = scroll ? min[i]
+                : smax <= avail ? (smax > 0 ? max[i] * avail / smax : avail / max.length)
+                : min[i] + (avail - smin) * (max[i] - min[i]) / (smax - smin);
+        return res;
+    }
+
     /** Колонки ячеек: ячейка с /N. занимает свою колонку ещё N-1 строк ниже, их ячейки сдвигаются вправо. */
     public void layout_table (GenericArray<Line> rows) {
         var busy = new int[MAX_CELLS * 20 + 20]; // сколько ещё строк колонка занята сверху

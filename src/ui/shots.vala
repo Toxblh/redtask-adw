@@ -7,6 +7,7 @@ namespace Redmine {
      * REDTASK_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
      * REDTASK_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDTASK_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
+     * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
      */
     namespace Shots {
         public void schedule (Window w) {
@@ -24,6 +25,16 @@ namespace Redmine {
                     Prefs.get_default ().s.set_value (kv.substring (0, eq), Variant.parse (null, kv.substring (eq + 1)));
                 } catch (Error e) { warning ("shot: %s: %s", kv, e.message); }
             }
+            var text_file = Environment.get_variable ("REDTASK_SHOT_TEXT");
+            if (text_file != null) Timeout.add (delay / 2, () => {
+                try {
+                    string t;
+                    FileUtils.get_contents (text_file, out t);
+                    var rt = new RichText (t) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
+                    w.content = new Gtk.ScrolledWindow () { child = rt, hscrollbar_policy = Gtk.PolicyType.NEVER };
+                } catch (Error e) { warning ("shot: %s", e.message); }
+                return Source.REMOVE;
+            });
             Timeout.add (delay / 2, () => {
                 var sec = Environment.get_variable ("REDTASK_SHOT_SECTION");
                 if (sec != null) w.show_section (sec);
