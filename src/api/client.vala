@@ -119,7 +119,8 @@ namespace Redmine {
             this.api_key = api_key.strip ();
             base_uri = Uri.parse (this.base_url, UriFlags.NONE);
             if (base_uri.get_host () == null || base_uri.get_host () == "") throw http_error (0, _("Bad server address"));
-            session = new Soup.Session ();
+            // 6 соединений, как у браузера (по умолчанию 2): страницы проектов качаются параллельно
+            session = (Soup.Session) Object.new (typeof (Soup.Session), "max-conns-per-host", 6);
             session.timeout = 40;
             session.user_agent = "RedmineAdw/" + Config.VERSION + " (GNOME)";
             var waf = WafGate.get_default ();
@@ -305,20 +306,43 @@ namespace Redmine {
         }
 
         // ---------- проекты ----------
+        /**
+         * Все проекты: сервер отдаёт не больше 100 за раз, страница — ~3 с (замер: 27 страниц подряд — 85 с).
+         * Первая страница называет total_count, остальные — в 5 потоков (≈ 20 с).
+         */
         public async GenericArray<Json.Object> projects () throws Error {
+            var first = yield get_obj ("projects.json", new Query ().add ("limit", "100").add ("offset", "0"));
+            // ponytail: потолок 5000 проектов (50 запросов) — у пользователя их ~3200
+            var total = int.min (jint (first, "total_count"), 5000);
+            var n = (total + 99) / 100;
+            var pages = new HashTable<int, Json.Object> (direct_hash, direct_equal);
+            pages[0] = first;
+            int next = 1, running = 0;
+            Error? failed = null;
+            SourceFunc resume = projects.callback;
+            for (int w = 0; w < 5; w++) {
+                running++;
+                projects_worker.begin (pages, n, () => next++, (o, r) => {
+                    try { projects_worker.end (r); } catch (Error e) { failed = e; }
+                    if (--running == 0) resume ();
+                });
+            }
+            yield;
+            if (failed != null) throw failed;
             var all = new GenericArray<Json.Object> ();
             var seen = new GenericSet<int> (direct_hash, direct_equal);
-            int offset = 0;
-            while (true) {
-                var page = yield get_obj ("projects.json", new Query ().add ("limit", "100").add ("offset", offset.to_string ()));
-                var items = jarr (page, "projects");
-                // страницы могут перекрыться, если список сдвинулся между запросами
-                foreach (var p in items) if (!seen.contains (jint (p, "id"))) { seen.add (jint (p, "id")); all.add (p); }
-                offset += 100;
-                // ponytail: потолок 5000 проектов (50 запросов) — у пользователя их ~3200
-                if (offset >= jint (page, "total_count") || items.length == 0 || offset >= 5000) break;
-            }
+            // страницы могут перекрыться, если список сдвинулся между запросами
+            for (int i = 0; i < int.max (n, 1); i++) if (pages[i] != null)
+                foreach (var p in jarr (pages[i], "projects")) if (!seen.contains (jint (p, "id"))) { seen.add (jint (p, "id")); all.add (p); }
             return all;
+        }
+
+        private delegate int NextPage ();
+
+        private async void projects_worker (HashTable<int, Json.Object> pages, int n, NextPage take) throws Error {
+            for (var i = take (); i < n; i = take ()) {
+                pages[i] = yield get_obj ("projects.json", new Query ().add ("limit", "100").add ("offset", (i * 100).to_string ()));
+            }
         }
 
         public async Json.Object project (int id) throws Error {

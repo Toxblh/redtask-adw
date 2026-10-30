@@ -204,10 +204,24 @@ namespace Redmine {
             foreach (var x in get_windows ()) if (x is Window) ((Window) x).show_main ();
             poller.start ();
             sync_background ();
+            warm.begin (s);
             if (pending_uri != null) {
                 var u = pending_uri;
                 pending_uri = null;
                 open_uri (u);
+            }
+        }
+
+        /** Прогрев после входа: проекты с диска (разбор в потоке), справочники, устаревший список проектов — фоном. */
+        private async void warm (Session s) {
+            yield s.refs.projects_cached_async ();
+            try {
+                yield s.refs.statuses ();
+                yield s.refs.trackers ();
+                yield s.refs.priorities ();
+                if (s.refs.projects_stale ()) yield s.refs.projects ();
+            } catch (Error e) {
+                debug ("warm: %s", e.message);
             }
         }
 

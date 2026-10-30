@@ -490,4 +490,64 @@ namespace Redmine {
     public void clear_list (Gtk.ListBox box) {
         box.remove_all ();
     }
+
+    public delegate Gtk.Widget RowBuild ();
+    public delegate void RowAction ();
+
+    /**
+     * Строка виртуального списка (lazy_list): виджет строится, только когда строка рядом с видимой областью, —
+     * тысячи проектов и сотни событий не создают тысячи виджетов. act == null — заголовок раздела (не выбирается и не нажимается).
+     */
+    public class LazyRow : Object {
+        public string key = "";
+        public RowBuild build;
+        public RowAction? act;
+        public LazyRow (owned RowBuild build, owned RowAction? act = null) { this.build = (owned) build; this.act = (owned) act; }
+    }
+
+    /** Gtk.ListView над моделью LazyRow: внешний вид .navigation-sidebar, нажатие и Enter — act строки. */
+    public Gtk.ListView lazy_list (ListModel model) {
+        var f = new Gtk.SignalListItemFactory ();
+        f.bind.connect ((o) => {
+            var li = (Gtk.ListItem) o;
+            var r = (LazyRow) li.item;
+            li.activatable = li.focusable = r.act != null;
+            li.selectable = false;
+            li.child = r.build ();
+        });
+        f.unbind.connect ((o) => ((Gtk.ListItem) o).child = null);
+        var lv = new Gtk.ListView (new Gtk.NoSelection (model), f) { single_click_activate = true };
+        lv.add_css_class ("navigation-sidebar");
+        lv.activate.connect ((pos) => {
+            var r = (LazyRow) lv.model.get_item (pos);
+            if (r != null && r.act != null) r.act ();
+        });
+        return lv;
+    }
+
+    /**
+     * Замена строк виртуального списка. GtkListView сразу строит виджеты ~200 строкам (замер: 500 событий — 200 строк,
+     * 250 мс до первого кадра) — первые 30 сейчас, остальные — после отрисовки кадра.
+     */
+    public void lazy_fill (GLib.ListStore store, Object[] rows) {
+        var gen = store.get_data<uint> ("gen") + 1;
+        store.set_data<uint> ("gen", gen);
+        var first = int.min (rows.length, 30);
+        store.splice (0, store.get_n_items (), rows[0:first]);
+        if (rows.length == first) return;
+        var rest = new Object[0];
+        for (var i = first; i < rows.length; i++) rest += rows[i];
+        Idle.add (() => {
+            if (store.get_data<uint> ("gen") == gen) store.splice (first, store.get_n_items () - first, rest);
+            return Source.REMOVE;
+        });
+    }
+
+    /** Заголовок раздела в списке. */
+    public Gtk.Widget list_heading (string text, bool dim = false) {
+        var l = new Gtk.Label (text) { xalign = 0, margin_start = 6, margin_top = 12, margin_bottom = dim ? 4 : 6 };
+        l.add_css_class ("heading");
+        if (dim) l.add_css_class ("dim-label");
+        return l;
+    }
 }

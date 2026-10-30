@@ -255,38 +255,32 @@ namespace Redmine {
         public void start_search () { list.start_search (); }
     }
 
-    /** Проекты: все видимые (их тысячи — поиск по названию обязателен), кэш 7 дней. */
+    /**
+     * Проекты: все видимые (их тысячи — поиск по названию обязателен), кэш 7 дней. Список виртуальный (ListView):
+     * строки строятся только для видимого, показ из кэша мгновенный, сеть — фоном, если кэш устарел.
+     */
     public class ProjectsSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
         private Gtk.SearchEntry entry;
-        private Gtk.ListBox list;
+        private GLib.ListStore store = new GLib.ListStore (typeof (LazyRow));
+        private Gtk.CustomFilter filter;
+        private Gtk.ScrolledWindow sw;
         private StateView state;
         private bool loaded = false;
 
         construct {
             var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             entry = new Gtk.SearchEntry () { placeholder_text = _("Find a project"), margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
-            entry.search_changed.connect (() => { list.invalidate_filter (); list.invalidate_headers (); });
-            box.append (entry);
-            list = new Gtk.ListBox ();
-            list.add_css_class ("navigation-sidebar");
-            list.set_filter_func ((row) => {
+            // поиск: заголовки разделов прячутся, остаются совпавшие строки
+            filter = new Gtk.CustomFilter ((o) => {
+                var r = (LazyRow) o;
                 var q = entry.text.strip ().casefold ();
-                return q == "" || ((string) row.get_data<string> ("key")).contains (q);
+                return q == "" || (r.act != null && r.key.contains (q));
             });
-            list.set_header_func ((row, before) => {
-                var text = row.get_data<string> ("header");
-                if (text == null || entry.text.strip () != "") { row.set_header (null); return; }
-                var l = new Gtk.Label (text) { xalign = 0, margin_start = 6, margin_top = 12, margin_bottom = 6 };
-                l.add_css_class ("heading");
-                row.set_header (l);
-            });
-            list.row_activated.connect ((row) => {
-                var id = row.get_data<int> ("id");
-                var name = (string) row.get_data<string> ("name");
-                win_of (this)?.push_list (new ProjectPage (id, name));
-            });
-            var sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
+            entry.search_changed.connect (() => filter.changed (Gtk.FilterChange.DIFFERENT));
+            box.append (entry);
+            var list = lazy_list (new Gtk.FilterListModel (store, filter));
+            sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
             state = new StateView (sw) { vexpand = true };
             state.retry_clicked.connect (() => load.begin (true));
             box.append (state);
@@ -301,13 +295,15 @@ namespace Redmine {
             var s = App.get ().session;
             if (s == null) return;
             loaded = true;
-            var cached = s.refs.projects_cached ();
-            if (cached != null && list.get_row_at_index (0) == null) fill (cached);
-            else if (list.get_row_at_index (0) == null) state.loading ();
+            // кэш (разбор — в потоке): показать сразу; сеть — только если устарел или «обновить»
+            var cached = yield s.refs.projects_cached_async ();
+            if (cached != null && store.get_n_items () == 0) fill (cached);
+            else if (store.get_n_items () == 0) state.loading ();
+            if (!fresh && cached != null && !s.refs.projects_stale ()) return;
             try {
                 fill (yield s.refs.projects (fresh));
             } catch (Error e) {
-                if (list.get_row_at_index (0) == null) state.error (e);
+                if (store.get_n_items () == 0) state.error (e);
                 else win_of (this)?.toast_error (e);
             }
         }
@@ -316,39 +312,47 @@ namespace Redmine {
 
         private void fill (GenericArray<Json.Object> projects) {
             all = projects;
-            list.remove_all ();
             var names = new HashTable<int, string> (direct_hash, direct_equal);
             foreach (var p in projects) names[jint (p, "id")] = jstr (p, "name");
             var sorted = new GenericArray<Json.Object> ();
             foreach (var p in projects) if (jint (p, "status", 1) == 1) sorted.add (p);
-            sorted.sort ((a, b) => strcmp (jstr (a, "name").casefold (), jstr (b, "name").casefold ()));
+            var keys = new HashTable<Json.Object, string> (direct_hash, direct_equal);
+            foreach (var p in sorted) keys[p] = jstr (p, "name").casefold ();
+            sorted.sort_with_data ((a, b) => strcmp (keys[a], keys[b]));
             // «Избранные» — сверху, общий список не меняется (закреплённые есть и в нём)
             var pins = Prefs.get_default ().project_pins ();
             var pinned = pinned_projects (sorted, pins);
-            foreach (var p in pinned) list.append (project_row (p, names, pins, pinned[0] == p ? _("Favorite Projects") : null));
-            foreach (var p in sorted) list.append (project_row (p, names, pins, pinned.length > 0 && sorted[0] == p ? _("All Projects") : null));
+            var rows = new Object[0];
+            if (pinned.length > 0) rows += new LazyRow (() => list_heading (_("Favorite Projects")));
+            foreach (var p in pinned) rows += project_row (p, names, pins);
+            if (pinned.length > 0) rows += new LazyRow (() => list_heading (_("All Projects")));
+            foreach (var p in sorted) rows += project_row (p, names, pins);
+            lazy_fill (store, rows);
             if (sorted.length == 0) state.empty (_("No Projects"), "folder-symbolic");
             else state.content ();
         }
 
         private void toggle_pin (int id, bool on) {
             Prefs.get_default ().set_project_pin (id, on);
-            var scroll = (list.parent as Gtk.Viewport)?.vadjustment;
-            var keep = scroll != null ? scroll.value : 0;
+            var keep = sw.vadjustment.value;
             fill (all);
-            if (scroll != null) Idle.add (() => { scroll.value = keep; return Source.REMOVE; });
+            Idle.add (() => { sw.vadjustment.value = keep; return Source.REMOVE; });
         }
 
-        private Gtk.ListBoxRow project_row (Json.Object p, HashTable<int, string> names, int[] pins, string? header) {
+        private LazyRow project_row (Json.Object p, HashTable<int, string> names, int[] pins) {
             var id = jint (p, "id");
-            var on = id in pins;
-            var row = new Gtk.ListBoxRow ();
-            var h = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 2 };
-            var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { hexpand = true };
-            var t = new Gtk.Label (jstr (p, "name")) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
-            b.append (t);
+            var name = jstr (p, "name");
             var parent = Named.from (jobj (p, "parent"));
             var sub_text = parent != null ? (names[parent.id] ?? parent.name) : jstr (p, "identifier");
+            var r = new LazyRow (() => project_widget (id, name, sub_text, id in pins), () => win_of (this)?.push_list (new ProjectPage (id, name)));
+            r.key = (name + " " + jstr (p, "identifier") + " " + sub_text).casefold ();
+            return r;
+        }
+
+        private Gtk.Widget project_widget (int id, string name, string sub_text, bool on) {
+            var h = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 2 };
+            var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { hexpand = true };
+            b.append (new Gtk.Label (name) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR });
             var sub = new Gtk.Label (sub_text) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
             sub.add_css_class ("dim-label");
             sub.add_css_class ("caption");
@@ -360,7 +364,6 @@ namespace Redmine {
             star.add_css_class ("flat");
             star.clicked.connect (() => toggle_pin (id, !on));
             h.append (star);
-            row.child = h;
             // контекстное меню: правый клик и долгое нажатие
             var m = new Menu ();
             m.append (on ? _("Remove from Favorites") : _("Add to Favorites"), "row.pin");
@@ -368,18 +371,14 @@ namespace Redmine {
             var a = new SimpleAction ("pin", null);
             a.activate.connect (() => toggle_pin (id, !on));
             g.add_action (a);
-            row.insert_action_group ("row", g);
+            h.insert_action_group ("row", g);
             var click = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
-            click.pressed.connect ((n, x, y) => popup_menu (row, m, x, y));
-            row.add_controller (click);
+            click.pressed.connect ((n, x, y) => popup_menu (h, m, x, y));
+            h.add_controller (click);
             var lp = new Gtk.GestureLongPress () { touch_only = true };
-            lp.pressed.connect ((x, y) => popup_menu (row, m, x, y));
-            row.add_controller (lp);
-            row.set_data<int> ("id", id);
-            row.set_data<string> ("name", jstr (p, "name"));
-            row.set_data<string> ("key", (jstr (p, "name") + " " + jstr (p, "identifier") + " " + sub_text).casefold ());
-            if (header != null) row.set_data<string> ("header", header);
-            return row;
+            lp.pressed.connect ((x, y) => popup_menu (h, m, x, y));
+            h.add_controller (lp);
+            return h;
         }
     }
 

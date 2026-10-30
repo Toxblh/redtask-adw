@@ -46,6 +46,34 @@ namespace Redmine {
             return n;
         }
 
+        /**
+         * Как load без срока, но чтение и разбор — в потоке: мегабайтный список проектов не замирает главный поток
+         * (замер: 6 МБ — 140 мс). Уже в памяти — сразу.
+         */
+        public async Json.Node? load_async (string key) {
+            if (mem_at[key] != null) return mem[key];
+            var p = path (key);
+            Json.Node? n = null;
+            int64 mtime = 0;
+            new Thread<void> ("cache", () => {
+                string text;
+                try {
+                    if (FileUtils.get_contents (p, out text)) {
+                        n = json_parse (text);
+                        mtime = File.new_for_path (p).query_info (FileAttribute.TIME_MODIFIED, FileQueryInfoFlags.NONE).get_modification_date_time ().to_unix () * 1000;
+                    }
+                } catch (Error e) {}
+                Idle.add (load_async.callback);
+            });
+            yield;
+            // пока читали, могли сохранить свежее — оно главнее
+            if (mem_at[key] != null) return mem[key];
+            if (n == null) return null;
+            mem[key] = n;
+            mem_at[key] = mtime;
+            return n;
+        }
+
         public void save (string key, Json.Node n) {
             mem[key] = n;
             mem_at[key] = now_ms ();
@@ -166,10 +194,39 @@ namespace Redmine {
         public async GenericArray<Json.Object> projects (bool fresh = false) throws Error {
             var h = fresh ? null : cache.load ("projects", 7 * DAY_MS);
             if (h != null) return node_arr (h);
-            var a = yield api.projects ();
-            cache.save ("projects", arr_node (a));
-            return a;
+            // десятки страниц: второй вызывающий (прогрев при запуске и открытие раздела) ждёт первый, а не качает заново
+            if (projects_busy) {
+                var id = projects_done.connect (() => Idle.add (projects.callback));
+                yield;
+                disconnect (id);
+                if (projects_error != null) throw projects_error;
+                return node_arr (cache.load ("projects"));
+            }
+            projects_busy = true;
+            projects_error = null;
+            try {
+                var a = yield api.projects ();
+                cache.save ("projects", arr_node (a));
+                return a;
+            } catch (Error e) {
+                projects_error = e;
+                throw e;
+            } finally {
+                projects_busy = false;
+                projects_done ();
+            }
         }
+        private bool projects_busy = false;
+        private Error? projects_error = null;
+        private signal void projects_done ();
+
+        public async GenericArray<Json.Object>? projects_cached_async () {
+            var h = yield cache.load_async ("projects");
+            return h != null ? node_arr (h) : null;
+        }
+
+        /** Кэш проектов старше 7 дней (или его нет) — пора в сеть. */
+        public bool projects_stale () { return cache.load ("projects", 7 * DAY_MS) == null; }
 
         public GenericArray<Json.Object>? projects_cached () {
             var h = cache.load ("projects");

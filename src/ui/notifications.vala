@@ -3,7 +3,8 @@ namespace Redmine {
 
     public class NotificationsSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
-        private Gtk.ListBox list;
+        private GLib.ListStore store = new GLib.ListStore (typeof (LazyRow));
+        private uint render_id = 0;
         private StateView state;
         private Adw.ToggleGroup view_mode;
         private Gtk.DropDown group_filter;
@@ -21,21 +22,17 @@ namespace Redmine {
             view_mode.active_name = Prefs.get_default ().s.get_boolean ("notif-by-issue") ? "issues" : "feed";
             view_mode.notify["active-name"].connect (() => {
                 Prefs.get_default ().s.set_boolean ("notif-by-issue", view_mode.active_name == "issues");
-                render ();
+                queue_render ();
             });
             top.append (view_mode);
             string[] labels = { _("All"), NotifGroup.ME.label (), NotifGroup.DISCUSSION.label (), NotifGroup.PROGRESS.label (), NotifGroup.DEADLINES.label (), NotifGroup.PROJECTS.label () };
             group_filter = new Gtk.DropDown.from_strings (labels) { tooltip_text = _("Show"), valign = Gtk.Align.CENTER };
-            group_filter.notify["selected"].connect (render);
+            group_filter.notify["selected"].connect (queue_render);
             top.append (group_filter);
             box.append (top);
 
-            list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.NONE };
-            list.add_css_class ("navigation-sidebar");
-            list.row_activated.connect ((row) => {
-                var id = row.get_data<int> ("issue");
-                if (id > 0) win_of (this)?.open_issue (id, row.get_data<int> ("note"));
-            });
+            // виртуальный список: из 500 событий виджеты строятся только около видимой области
+            var list = lazy_list (store);
             var sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
             state = new StateView (sw) { vexpand = true };
             state.retry_clicked.connect (() => refresh ());
@@ -52,7 +49,7 @@ namespace Redmine {
             bound = s;
             changed_id = s.notifs.changed.connect (() => {
                 if (!get_mapped ()) win_of (this)?.set_unread (s.notifs.unread_count ());
-                else render ();
+                else queue_render ();
             });
             win_of (this)?.set_unread (s.notifs.unread_count ());
         }
@@ -64,7 +61,7 @@ namespace Redmine {
             // открытие колокольчика: подсветить новое и пометить всё прочитанным
             foreach (var k in s.notifs.take_unread ().get_values ()) unread.add (k);
             win_of (this)?.set_unread (0);
-            render ();
+            queue_render ();
             if (s.notifs.needs_backfill () && !backfilling) backfill.begin (s);
         }
 
@@ -74,7 +71,7 @@ namespace Redmine {
             App.get ().poller.run.begin ((o, r) => {
                 var ok = App.get ().poller.run.end (r);
                 foreach (var k in s.notifs.take_unread ().get_values ()) unread.add (k);
-                render ();
+                queue_render ();
                 if (!ok) win_of (this)?.toast (_("Could not check for notifications"));
             });
         }
@@ -91,7 +88,13 @@ namespace Redmine {
                 if (s.notifs.load ().length == 0) { state.error (e); backfilling = false; return; }
             }
             backfilling = false;
-            render ();
+            queue_render ();
+        }
+
+        /** Несколько поводов подряд (показ, take_unread → changed) — одна перерисовка. */
+        private void queue_render () {
+            if (render_id != 0) return;
+            render_id = Idle.add (() => { render_id = 0; render (); return Source.REMOVE; });
         }
 
         private bool passes (NotifEntry e) {
@@ -108,23 +111,24 @@ namespace Redmine {
             return format_date (date);
         }
 
-        private void day_header (string date) {
-            var row = new Gtk.ListBoxRow () { activatable = false, selectable = false };
-            var l = new Gtk.Label (day_title (date)) { xalign = 0, margin_start = 6, margin_top = 12, margin_bottom = 4 };
-            l.add_css_class ("heading");
-            l.add_css_class ("dim-label");
-            row.child = l;
-            list.append (row);
+        private LazyRow day_header (string date) {
+            var t = day_title (date);
+            return new LazyRow (() => list_heading (t, true));
+        }
+
+        private LazyRow lazy (owned RowBuild build, int issue, int note) {
+            return new LazyRow ((owned) build, () => { if (issue > 0) win_of (this)?.open_issue (issue, note); });
         }
 
         private void render () {
             var s = App.get ().session;
             if (s == null) return;
-            list.remove_all ();
             var all = s.notifs.load ();
             var shown = new GenericArray<NotifEntry> ();
             foreach (var e in all) if (passes (e)) shown.add (e);
+            var rows = new Object[0];
             if (shown.length == 0) {
+                lazy_fill (store, rows);
                 if (!backfilling) state.empty (_("No Notifications Yet"), "preferences-system-notifications-symbolic",
                     _("Comments, mentions and changes in your issues will appear here"));
                 return;
@@ -132,24 +136,27 @@ namespace Redmine {
             var tz = new TimeZone.local ();
             if (view_mode.active_name == "issues") {
                 foreach (var day in group_by_issue (shown, tz)) {
-                    day_header (day.date);
-                    foreach (var g in day.groups) list.append (group_row (g));
+                    rows += day_header (day.date);
+                    foreach (var g in day.groups) rows += group_item (g);
                 }
             } else {
                 string? cur = null;
                 foreach (var e in shown) {
                     var d = local_day (e.at, tz);
-                    if (d != cur) { day_header (d); cur = d; }
-                    list.append (entry_row (e));
+                    if (d != cur) { rows += day_header (d); cur = d; }
+                    rows += entry_item (e);
                 }
             }
             state.content ();
+            lazy_fill (store, rows);
         }
 
-        private Gtk.ListBoxRow base_row (int issue_id, int note, string subject, int project_id, string project) {
-            var row = new Gtk.ListBoxRow ();
-            row.set_data<int> ("issue", issue_id);
-            row.set_data<int> ("note", note);
+        private LazyRow entry_item (NotifEntry e) { return lazy (() => entry_row (e), e.issue_id, e.journal_id); }
+        private LazyRow group_item (NotifIssueGroup g) { return lazy (() => group_row (g), g.issue_id, g.journal_id); }
+
+        /** Контейнер строки с контекстным меню. */
+        private Gtk.Box base_row (Gtk.Orientation o, int spacing, int issue_id, string subject, int project_id, string project) {
+            var row = new Gtk.Box (o, spacing);
             // контекстное меню (правая кнопка / долгое нажатие): отключить уведомления по задаче или проекту
             var g = new SimpleActionGroup ();
             var p = Prefs.get_default ();
@@ -190,8 +197,9 @@ namespace Redmine {
         }
 
         private Gtk.Widget entry_row (NotifEntry e) {
-            var row = base_row (e.issue_id, e.journal_id, e.subject, e.project_id, e.project);
-            var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 10) { margin_top = 6, margin_bottom = 6, margin_start = 4, margin_end = 4 };
+            var b = base_row (Gtk.Orientation.HORIZONTAL, 10, e.issue_id, e.subject, e.project_id, e.project);
+            b.margin_top = 6; b.margin_bottom = 6;
+            b.margin_start = 4; b.margin_end = 4;
             if (e.avatar_user_id != 0) b.append (Avatars.make (e.avatar_user_id, e.author, 32));
             else {
                 var icon = new Gtk.Image.from_icon_name (category_icon (e.type)) { pixel_size = 20, width_request = 32, valign = Gtk.Align.START };
@@ -223,8 +231,7 @@ namespace Redmine {
             col.append (cat);
             b.append (col);
             if (e.image_id != 0) b.append (thumb (e.image_id));
-            row.child = b;
-            return row;
+            return b;
         }
 
         /** Миниатюра картинки события справа в строке истории. */
@@ -242,8 +249,9 @@ namespace Redmine {
 
         private Gtk.Widget group_row (NotifIssueGroup g) {
             var e = g.latest;
-            var row = base_row (g.issue_id, g.journal_id, e.subject, e.project_id, e.project);
-            var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 4) { margin_top = 8, margin_bottom = 8, margin_start = 6, margin_end = 6 };
+            var col = base_row (Gtk.Orientation.VERTICAL, 4, g.issue_id, e.subject, e.project_id, e.project);
+            col.margin_top = 8; col.margin_bottom = 8;
+            col.margin_start = 6; col.margin_end = 6;
             var head = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
             var t = new Gtk.Label ("#%d %s".printf (g.issue_id, e.subject)) { xalign = 0, wrap = true, lines = 2, ellipsize = Pango.EllipsizeMode.END, hexpand = true };
             t.add_css_class ("heading");
@@ -273,8 +281,7 @@ namespace Redmine {
             col.append (meta);
             var last = new Gtk.Label (e.lines.length > 0 ? e.lines[0] : "") { xalign = 0, wrap = true, lines = 2, ellipsize = Pango.EllipsizeMode.END };
             col.append (last);
-            row.child = col;
-            return row;
+            return col;
         }
     }
 }
