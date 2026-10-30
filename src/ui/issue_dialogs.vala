@@ -233,6 +233,19 @@ namespace Redmine {
             strings.append (label);
         }
 
+        /** Статусы — пилюлями (PARITY 0); closed — id конечных статусов. */
+        public void as_status (GenericSet<int> closed) {
+            var f = new Gtk.SignalListItemFactory ();
+            f.bind.connect ((o) => {
+                var li = (Gtk.ListItem) o;
+                var p = li.position;
+                var pill = status_pill (((Gtk.StringObject) li.item).string, p < _ids.length && closed.contains (_ids[p]));
+                pill.halign = Gtk.Align.START;
+                li.child = pill;
+            });
+            factory = f;
+        }
+
         public void clear () {
             _ids = {};
             strings.splice (0, strings.get_n_items (), null);
@@ -613,9 +626,15 @@ namespace Redmine {
                     var v = issue.fixed_version;
                     if (v != null) version.selected_id = v.id;
                     status.clear ();
+                    var closed = new GenericSet<int> (direct_hash, direct_equal);
+                    if (issue.status_closed) closed.add (issue.status.id);
                     status.add (issue.status.id, issue.status.name);
                     var allowed = issue.allowed_statuses;
-                    if (allowed != null) foreach (var st in allowed) if (jint (st, "id") != issue.status.id) status.add (jint (st, "id"), jstr (st, "name"));
+                    if (allowed != null) foreach (var st in allowed) if (jint (st, "id") != issue.status.id) {
+                        if (jbool (st, "is_closed")) closed.add (jint (st, "id"));
+                        status.add (jint (st, "id"), jstr (st, "name"));
+                    }
+                    status.as_status (closed);
                     status.selected_id = issue.status.id;
                 } else {
                     priority.selected_id = def_prio;

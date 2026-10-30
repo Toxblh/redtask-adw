@@ -71,6 +71,8 @@ button.mention-pill:hover {
 .status-pill.in-progress { color: oklab(from var(--accent-blue) var(--standalone-color-oklab)); }
 .status-pill.done { color: var(--success-color); }
 .status-pill.rejected { color: var(--error-color); }
+/* подсказка тёмная в обеих темах — серой пилюле цвет текста подсказки */
+tooltip .status-pill.todo { color: inherit; }
 .closed-issue,
 row.closed-issue .title {
   text-decoration-line: line-through;

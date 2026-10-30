@@ -420,10 +420,12 @@ namespace Redmine {
         public void refresh () { if (query != "") run.begin (query); }
         public void start_search () { entry.grab_focus (); }
 
-        private void add_row (int id, string title, string subtitle) {
+        /** status — пилюлей над подписью (null — без статуса). */
+        private void add_row (int id, string title, string subtitle, string? status = null, bool closed = false) {
             var row = new Gtk.ListBoxRow ();
             var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
             b.append (new Gtk.Label (title) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, lines = 2, ellipsize = Pango.EllipsizeMode.END });
+            if (status != null) b.append (status_line (status, closed, ""));
             if (subtitle != "") {
                 var sub = new Gtk.Label (subtitle) { xalign = 0, lines = 2, wrap = true, ellipsize = Pango.EllipsizeMode.END };
                 sub.add_css_class ("dim-label");
@@ -451,7 +453,7 @@ namespace Redmine {
                     foreach (var i in yield s.api.find_issues (q, 30)) {
                         if (my != gen) return;
                         seen.add (i.id);
-                        add_row (i.id, "#%d %s".printf (i.id, i.subject), "%s · %s".printf (i.status.name, i.project.name));
+                        add_row (i.id, "#%d %s".printf (i.id, i.subject), i.project.name, i.status.name, i.status_closed);
                     }
                     total = 0;
                 } else {
@@ -473,7 +475,10 @@ namespace Redmine {
             offset += results.length;
             foreach (var x in results) {
                 if (!jstr (x, "type").has_prefix ("issue")) continue;
-                add_row (jint (x, "id"), jstr (x, "title"), Textile.preview (jstr (x, "description")));
+                // заголовок search.json — «Трекер #N (Статус): тема»; статус — пилюлей, «issue-closed» — закрытая
+                string? st = null;
+                var title = split_search_status (jstr (x, "title"), out st);
+                add_row (jint (x, "id"), title, Textile.preview (jstr (x, "description")), st, jstr (x, "type") == "issue-closed");
             }
         }
 

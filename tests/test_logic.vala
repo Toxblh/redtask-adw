@@ -20,6 +20,16 @@ void test_dates () {
     assert (format_relative ("2023-11-14T22:13:20Z", 1700000000000 + 5 * 60000) == _("%d min").printf (5));
 }
 
+void test_status_text () {
+    string? st;
+    assert (split_search_status ("Улучшение #258917 (В работе): Разворачивание (zot)", out st) == "Улучшение #258917: Разворачивание (zot)" && st == "В работе");
+    assert (split_search_status ("Вики: Страница", out st) == "Вики: Страница" && st == null);
+    string t;
+    bool c;
+    assert (brief_status ("C|Ошибка: тема (x) (Закрыта)", out t, out c) == "Закрыта" && t == "Ошибка: тема (x)" && c);
+    assert (brief_status ("O|Ошибка: тема", out t, out c) == null && t == "Ошибка: тема" && !c);
+}
+
 void test_status_kind () {
     assert (status_kind ("Новая", false) == StatusKind.TODO);
     assert (status_kind ("BACKLOG", false) == StatusKind.TODO);
@@ -210,5 +220,6 @@ int main (string[] args) {
     Test.add_func ("/logic/server-link", test_server_link);
     Test.add_func ("/logic/favourites", test_favourites);
     Test.add_func ("/logic/csv", test_csv);
+    Test.add_func ("/logic/status-text", test_status_text);
     return Test.run ();
 }

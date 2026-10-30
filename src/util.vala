@@ -229,3 +229,25 @@ namespace Redmine {
         }
     }
 }
+
+namespace Redmine {
+    /** Заголовок search.json «Трекер #N (Статус): тема» → «Трекер #N: тема» и статус; не тот формат — как есть, status = null. */
+    public string split_search_status (string title, out string? status) {
+        status = null;
+        MatchInfo mi;
+        if (!/^(.*?#\d+) \((.+?)\): (.*)$/s.match (title, 0, out mi)) return title;
+        status = mi.fetch (2);
+        return mi.fetch (1) + ": " + mi.fetch (3);
+    }
+
+    /** Сводка ссылки #N «C|Трекер: тема (Статус)» → подсказка без статуса, статус и закрытость; без «(…)» в конце — null. */
+    public string? brief_status (string brief, out string text, out bool closed) {
+        closed = brief.has_prefix ("C|");
+        text = brief.length > 1 && brief[1] == '|' ? brief.substring (2) : brief;
+        var p = text.last_index_of (" (");
+        if (p < 0 || !text.has_suffix (")")) return null;
+        var st = text.substring (p + 2, text.length - p - 3);
+        text = text.substring (0, p);
+        return st;
+    }
+}

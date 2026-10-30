@@ -62,6 +62,7 @@ namespace Redmine {
         private Perms can = new Perms ();
         /** Имена значений журналов: поле (status_id…) → id → имя. */
         private HashTable<string, HashTable<string, string>> names = new HashTable<string, HashTable<string, string>> (str_hash, str_equal);
+        private GenericSet<string> closed_statuses = new GenericSet<string> (str_hash, str_equal);
         private HashTable<int, Gtk.Widget> note_widgets = new HashTable<int, Gtk.Widget> (direct_hash, direct_equal);
         private HashTable<int, Issue> linked = new HashTable<int, Issue> (direct_hash, direct_equal);
         private int[] jids = {};
@@ -240,7 +241,10 @@ namespace Redmine {
 
         private async void load_names (Session s, int my) {
             try {
-                foreach (var x in yield s.refs.statuses ()) put_name ("status_id", jint (x, "id"), jstr (x, "name"));
+                foreach (var x in yield s.refs.statuses ()) {
+                    put_name ("status_id", jint (x, "id"), jstr (x, "name"));
+                    if (jbool (x, "is_closed")) closed_statuses.add (jint (x, "id").to_string ());
+                }
                 foreach (var x in yield s.refs.priorities ()) put_name ("priority_id", jint (x, "id"), jstr (x, "name"));
                 foreach (var x in yield s.refs.trackers ()) put_name ("tracker_id", jint (x, "id"), jstr (x, "name"));
                 foreach (var x in yield s.refs.versions (issue.project.id)) put_name ("fixed_version_id", jint (x, "id"), jstr (x, "name"));
@@ -388,17 +392,24 @@ namespace Redmine {
             menu_btn.menu_model = m;
 
             // статусы — по allowed_statuses задачи (что разрешает рабочий процесс)
-            var sm = new Menu ();
+            // пункты — цветными пилюлями (PARITY 0): свой поповер вместо GMenu, тот красит только текст
+            var sm = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             var allowed = issue.allowed_statuses;
             int n = 0;
             if (allowed != null) foreach (var st in allowed) {
                 if (jint (st, "id") == issue.status.id) continue;
-                sm.append (jstr (st, "name"), "issue.set-status(%d)".printf (jint (st, "id")));
+                var pill = status_pill (jstr (st, "name"), jbool (st, "is_closed") || closed_statuses.contains (jint (st, "id").to_string ()));
+                pill.halign = Gtk.Align.START;
+                var item = new Gtk.Button () { child = pill, action_name = "issue.set-status", action_target = new Variant.int32 (jint (st, "id")) };
+                item.add_css_class ("flat");
+                item.clicked.connect (() => status_btn.popdown ());
+                sm.append (item);
                 n++;
             }
-            status_btn.menu_model = sm;
+            status_btn.popover = new Gtk.Popover () { child = sm };
             status_btn.sensitive = n > 0;
             status_label.label = issue.status.name;
+            status_label.css_classes = { "status-pill", status_class (issue.status.name, issue.status_closed) };
         }
 
         /** PUT одного поля и обновление экрана. */
@@ -546,7 +557,8 @@ namespace Redmine {
             // поля
             var props = boxed ();
             props.margin_top = 18;
-            var st = prop (props, _("Status"), i.status.name);
+            var st = prop (props, _("Status"), "");
+            st.add_suffix (status_pill (i.status.name, i.status_closed));
             prop (props, _("Priority"), i.priority.name);
             var a = i.assigned_to;
             var asg = prop (props, _("Assignee"), a != null ? a.name : _("Not assigned"));
@@ -674,6 +686,13 @@ namespace Redmine {
             body.append (row);
         }
 
+        /** Пилюля статуса справа в строке подзадачи/связи: тема переносится, пилюля — нет. */
+        private static Gtk.Widget suffix_pill (Issue i) {
+            var p = status_pill (i.status.name, i.status_closed);
+            p.ellipsize = Pango.EllipsizeMode.NONE;
+            return p;
+        }
+
         private void render_children () {
             var ch = issue.children;
             if (ch.length == 0) return;
@@ -685,10 +704,11 @@ namespace Redmine {
                 var assignee = full != null ? full.assigned_to : null;
                 var r = new Adw.ActionRow () {
                     title = Markup.escape_text ("#%d %s".printf (id, jstr (c, "subject"))),
-                    subtitle = full != null ? Markup.escape_text (full.status.name + (assignee != null ? " · " + assignee.name : "")) : "",
+                    subtitle = assignee != null ? Markup.escape_text (assignee.name) : "",
                     activatable = true,
                 };
                 if (full != null && full.status_closed) { r.add_css_class ("dim-label"); r.add_css_class ("closed-issue"); }
+                if (full != null) r.add_suffix (suffix_pill (full));
                 r.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
                 r.activated.connect (() => win ()?.open_issue (id, 0, true));
                 list.append (r);
@@ -710,11 +730,11 @@ namespace Redmine {
                 var delay = jint (r, "delay");
                 var row = new Adw.ActionRow () {
                     title = Markup.escape_text ("#%d %s".printf (other, full != null ? full.subject : "")),
-                    subtitle = Markup.escape_text (relation_label (type) + (delay > 0 ? " · " + _("+%d d").printf (delay) : "")
-                        + (full != null ? " · " + full.status.name : "")),
+                    subtitle = Markup.escape_text (relation_label (type) + (delay > 0 ? " · " + _("+%d d").printf (delay) : "")),
                     activatable = true,
                 };
                 if (full != null && full.status_closed) { row.add_css_class ("dim-label"); row.add_css_class ("closed-issue"); }
+                if (full != null) row.add_suffix (suffix_pill (full));
                 row.activated.connect (() => win ()?.open_issue (other, 0, true));
                 if (manage) {
                     var del = new Gtk.Button.from_icon_name ("user-trash-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Remove Relation") };
@@ -789,6 +809,24 @@ namespace Redmine {
             if (field == "done_ratio") return v + " %";
             if (field == "parent_id") return "#" + v;
             return v.char_count () > 120 ? v.substring (0, v.index_of_nth_char (120)) + "…" : v;
+        }
+
+        /** «Статус: было → стало» — оба значения пилюлями (PARITY 0). */
+        private Gtk.Widget status_detail (Json.Object d) {
+            var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+            var l = new Gtk.Label (_("Status") + ":");
+            l.add_css_class ("dim-label");
+            b.append (l);
+            var ov = jstr (d, "old_value");
+            if (ov != "") {
+                b.append (status_pill (detail_value ("status_id", ov), closed_statuses.contains (ov)));
+                var arrow = new Gtk.Label ("→");
+                arrow.add_css_class ("dim-label");
+                b.append (arrow);
+            }
+            var nv = jstr (d, "new_value");
+            b.append (status_pill (detail_value ("status_id", nv), closed_statuses.contains (nv)));
+            return b;
         }
 
         private string detail_text (Json.Object d) {
@@ -904,6 +942,7 @@ namespace Redmine {
             box.append (head);
             var inner = new Gtk.Box (Gtk.Orientation.VERTICAL, 4) { margin_start = 40 };
             if (details) foreach (var d in jarr (j, "details")) {
+                if (jstr (d, "property") == "attr" && jstr (d, "name") == "status_id") { inner.append (status_detail (d)); continue; }
                 var l = new Gtk.Label (detail_text (d)) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
                 l.add_css_class ("dim-label");
                 inner.append (l);

@@ -415,7 +415,18 @@ namespace Redmine {
                 if (kb) return false;
                 var l = link_at (x, y);
                 if (l == null || l.title == null) return false;
-                tip.set_text (l.title);
+                // ссылка на задачу: статус в подсказке — цветной пилюлей (PARITY 0)
+                string text;
+                bool c;
+                if (!l.href.has_prefix ("issue:")) { tip.set_text (l.title); return true; }
+                var st = brief_status (l.title, out text, out c);
+                if (st == null) { tip.set_text (l.title); return true; }
+                Gtk.TextIter it;
+                buffer.get_iter_at_offset (out it, l.start);
+                var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+                b.append (new Gtk.Label (text) { wrap = true, max_width_chars = 60, xalign = 0 });
+                b.append (status_pill (st, it.has_tag (shared.lookup ("closed"))));
+                tip.set_custom (b);
                 return true;
             });
             var focus = new Gtk.EventControllerFocus ();

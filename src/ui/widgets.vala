@@ -60,11 +60,26 @@ namespace Redmine {
     /** Статус пилюлей: полупрозрачный фон и цветной текст по виду (style.css, .status-pill). */
     public Gtk.Label status_pill (string name, bool closed) {
         var l = new Gtk.Label (name) { ellipsize = Pango.EllipsizeMode.END, max_width_chars = 20, valign = Gtk.Align.CENTER };
-        l.add_css_class ("status-pill");
-        l.add_css_class ("caption");
-        string[] cls = { "todo", "in-progress", "done", "rejected" };
-        l.add_css_class (cls[status_kind (name, closed)]);
+        l.css_classes = { "status-pill", "caption", status_class (name, closed) };
         return l;
+    }
+
+    public string status_class (string name, bool closed) {
+        string[] cls = { "todo", "in-progress", "done", "rejected" };
+        return cls[status_kind (name, closed)];
+    }
+
+    /** Подпись строки: пилюля статуса и текст после неё («Статус · проект»). */
+    public Gtk.Widget status_line (string status, bool closed, string rest) {
+        var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+        b.append (status_pill (status, closed));
+        if (rest != "") {
+            var l = new Gtk.Label (rest) { xalign = 0, ellipsize = Pango.EllipsizeMode.END, hexpand = true };
+            l.add_css_class ("dim-label");
+            l.add_css_class ("caption");
+            b.append (l);
+        }
+        return b;
     }
 
     /** Строка списка — раскладка карточки IssueCard с Android. */

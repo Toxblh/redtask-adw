@@ -279,10 +279,7 @@ namespace Redmine {
                     var row = new Gtk.ListBoxRow ();
                     var b = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
                     b.append (new Gtk.Label ("#%d %s".printf (i.id, i.subject)) { xalign = 0, wrap = true, lines = 2, ellipsize = Pango.EllipsizeMode.END });
-                    var sub = new Gtk.Label (i.status.name + " · " + i.project.name + (i.id == exclude ? " · " + _("this issue") : "")) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
-                    sub.add_css_class ("dim-label");
-                    sub.add_css_class ("caption");
-                    b.append (sub);
+                    b.append (status_line (i.status.name, i.status_closed, i.project.name + (i.id == exclude ? " · " + _("this issue") : "")));
                     row.child = b;
                     row.sensitive = i.id != exclude;
                     row.set_data<Issue> ("issue", i);
