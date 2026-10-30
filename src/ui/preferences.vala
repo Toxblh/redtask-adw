@@ -88,7 +88,13 @@ namespace Redmine {
             test.activated.connect (() => {
                 var n = new GLib.Notification ("#1 " + _("Example issue"));
                 n.set_body (_("Ivan Ivanov: this is how a comment notification looks"));
-                App.get ().send_notification ("test", n);
+                // аватар — свой: так видно, как выглядит аватар автора (spec 4.2)
+                var me = App.get ().session != null ? App.get ().session.user_id : 0;
+                App.get ().poller.notification_icon.begin (0, me, (o, r) => {
+                    var icon = App.get ().poller.notification_icon.end (r);
+                    if (icon != null) n.set_icon (new FileIcon (icon));
+                    App.get ().send_notification ("test", n);
+                });
             });
             main.add (test);
             notif.add (main);

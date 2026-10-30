@@ -526,7 +526,7 @@ namespace Redmine {
                 n.set_category ("im.received");
                 n.set_default_action_and_target_value ("app.open-issue", new Variant ("(ii)", id, note));
                 n.add_button_with_target_value (_("Mute Issue"), "app.mute-issue", new Variant ("(is)", id, last.subject));
-                var icon = image != 0 ? yield thumbnail_file (image) : null;
+                var icon = yield notification_icon (image, last.avatar_user_id);
                 if (icon != null) n.set_icon (new FileIcon (icon));
                 var nid = "issue-%d".printf (id);
                 app.send_notification (nid, n);
@@ -536,16 +536,27 @@ namespace Redmine {
         }
 
         /**
-         * Превью картинки для уведомления (attachments/thumbnail/{id}/400) файлом в кэше учётки. Большую картинку
-         * уведомления GNOME не показывают — она идёт иконкой. Дольше 10 с не ждём: тогда уведомление без картинки.
+         * Иконка уведомления: превью картинки комментария, иначе аватар автора (место одно — spec 4.2, «Отклонения»).
+         * На обе загрузки вместе — 10 с, дальше уведомление уходит без иконки.
          */
-        private async File? thumbnail_file (int id) {
+        public async File? notification_icon (int image_id, int user_id) {
             var s = App.get ().session;
             if (s == null) return null;
-            var f = File.new_for_path (Path.build_filename (s.cache.dir, "notif-thumb-%d".printf (id)));
-            if (f.query_exists ()) return f;
             var c = new Cancellable ();
             var t = Timeout.add_seconds (10, () => { c.cancel (); return Source.REMOVE; });
+            File? f = image_id != 0 ? yield thumbnail_file (s, image_id, c) : null;
+            if (f == null && user_id > 0) f = yield avatar_file (s, user_id, c);
+            if (!c.is_cancelled ()) Source.remove (t);
+            return f;
+        }
+
+        /**
+         * Превью картинки для уведомления (attachments/thumbnail/{id}/400) файлом в кэше учётки. Большую картинку
+         * уведомления GNOME не показывают — она идёт иконкой.
+         */
+        private async File? thumbnail_file (Session s, int id, Cancellable c) {
+            var f = File.new_for_path (Path.build_filename (s.cache.dir, "notif-thumb-%d".printf (id)));
+            if (f.query_exists ()) return f;
             try {
                 var b = yield s.api.thumbnail (id, 400, c);
                 if (b == null) return null;
@@ -554,8 +565,28 @@ namespace Redmine {
             } catch (Error e) {
                 debug ("notification thumbnail %d: %s", id, e.message);
                 return null;
-            } finally {
-                if (!c.is_cancelled ()) Source.remove (t);
+            }
+        }
+
+        /**
+         * Аватар тем же файлом avatar-<id>, что и в приложении (Avatars): есть на диске — берём как есть, обновляет его
+         * приложение. Пустой файл — «фото нет» на 10 минут, как там же. Иконка квадратная: обрезка в круг — забота Shell.
+         */
+        private async File? avatar_file (Session s, int id, Cancellable c) {
+            var key = "avatar-%d".printf (id);
+            var f = File.new_for_path (Path.build_filename (s.cache.dir, key));
+            try {
+                var info = yield f.query_info_async (FileAttribute.TIME_MODIFIED + "," + FileAttribute.STANDARD_SIZE, FileQueryInfoFlags.NONE);
+                if (info.get_size () > 0) return f;
+                if (now_ms () - info.get_modification_date_time ().to_unix () * 1000 < 10 * 60 * 1000) return null;
+            } catch (Error e) {}
+            try {
+                var b = yield s.api.avatar (id, c);
+                s.cache.save_bytes (key, b ?? new Bytes ({}));
+                return b != null ? f : null;
+            } catch (Error e) {
+                debug ("notification avatar %d: %s", id, e.message);
+                return null;
             }
         }
 

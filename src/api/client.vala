@@ -712,8 +712,8 @@ namespace Redmine {
         }
 
         /** Аватар: страница /people/:id (HTML, Basic «ключ:x») → id вложения → картинка. null — фото нет. */
-        public async Bytes? avatar (int user_id) throws Error {
-            var r = yield raw ("GET", url ("people/%d".printf (user_id)), "text/html", null, null, true);
+        public async Bytes? avatar (int user_id, Cancellable? c = null) throws Error {
+            var r = yield raw ("GET", url ("people/%d".printf (user_id)), "text/html", null, null, true, c);
             var msg = r.msg;
             if (msg.status_code == 404 || msg.status_code == 401 || msg.status_code == 403) return null;
             if (msg.status_code < 200 || msg.status_code >= 300) throw http_error ((int) msg.status_code, "people: HTTP %u".printf (msg.status_code));
@@ -723,13 +723,13 @@ namespace Redmine {
             var att_id = int.parse (mi.fetch (1));
             string content_url;
             try {
-                content_url = jstr (jobj (yield get_obj ("attachments/%d.json".printf (att_id)), "attachment"), "content_url");
+                content_url = jstr (jobj (yield get_obj ("attachments/%d.json".printf (att_id), null, c), "attachment"), "content_url");
             } catch (Error e) {
                 if (error_code (e) == 404 || error_code (e) == 403) return null;
                 throw e;
             }
             if (content_url == "") return null;
-            var img = yield raw ("GET", own (content_url), "image/*", null, null);
+            var img = yield raw ("GET", own (content_url), "image/*", null, null, false, c);
             var ct = img.msg.response_headers.get_content_type (null) ?? "";
             if (img.msg.status_code >= 200 && img.msg.status_code < 300 && ct.has_prefix ("image/")) return img.body;
             return null;
