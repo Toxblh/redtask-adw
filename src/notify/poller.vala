@@ -527,7 +527,7 @@ namespace Redmine {
                 n.set_default_action_and_target_value ("app.open-issue", new Variant ("(ii)", id, note));
                 n.add_button_with_target_value (_("Mute Issue"), "app.mute-issue", new Variant ("(is)", id, last.subject));
                 var icon = yield notification_icon (image, last.avatar_user_id);
-                if (icon != null) n.set_icon (new FileIcon (icon));
+                if (icon != null) n.set_icon (icon);
                 var nid = "issue-%d".printf (id);
                 app.send_notification (nid, n);
                 posted[id] = nid;
@@ -539,15 +539,55 @@ namespace Redmine {
          * Иконка уведомления: превью картинки комментария, иначе аватар автора (место одно — spec 4.2, «Отклонения»).
          * На обе загрузки вместе — 10 с, дальше уведомление уходит без иконки.
          */
-        public async File? notification_icon (int image_id, int user_id) {
+        public async Icon? notification_icon (int image_id, int user_id) {
             var s = App.get ().session;
             if (s == null) return null;
             var c = new Cancellable ();
             var t = Timeout.add_seconds (10, () => { c.cancel (); return Source.REMOVE; });
             File? f = image_id != 0 ? yield thumbnail_file (s, image_id, c) : null;
-            if (f == null && user_id > 0) f = yield avatar_file (s, user_id, c);
+            Icon? icon = f != null ? portal_icon (f, false) : null;
+            if (icon == null && user_id > 0) {
+                f = yield avatar_file (s, user_id, c);
+                if (f != null) icon = portal_icon (f, true);
+            }
             if (!c.is_cancelled ()) Source.remove (t);
-            return f;
+            return icon;
+        }
+
+        /**
+         * Портал уведомлений (flatpak) молча выбрасывает иконку, если она не квадратная или больше 512 px.
+         * Поэтому — квадрат 256 px байтами: аватар обрезается по центру кругом, картинка вписывается целиком
+         * на прозрачный фон.
+         */
+        private static Icon? portal_icon (File f, bool round) {
+            const int S = 256;
+            try {
+                var src = new Gdk.Pixbuf.from_file (f.get_path ());
+                Gdk.Pixbuf sq;
+                if (round) {
+                    int side = int.min (src.width, src.height);
+                    sq = new Gdk.Pixbuf.subpixbuf (src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+                        .scale_simple (S, S, Gdk.InterpType.BILINEAR).add_alpha (false, 0, 0, 0);
+                    unowned uint8[] px = sq.get_pixels_with_length ();
+                    double r = S / 2.0;
+                    for (int y = 0; y < S; y++) for (int x = 0; x < S; x++) {
+                        double dx = x + 0.5 - r, dy = y + 0.5 - r;
+                        if (dx * dx + dy * dy > r * r) px[y * sq.rowstride + x * 4 + 3] = 0;
+                    }
+                } else {
+                    double k = double.min ((double) S / src.width, (double) S / src.height);
+                    int w = int.max (1, (int) (src.width * k)), h = int.max (1, (int) (src.height * k));
+                    var fit = src.scale_simple (w, h, Gdk.InterpType.BILINEAR).add_alpha (false, 0, 0, 0);
+                    sq = new Gdk.Pixbuf (Gdk.Colorspace.RGB, true, 8, S, S);
+                    sq.fill (0);
+                    fit.copy_area (0, 0, w, h, sq, (S - w) / 2, (S - h) / 2);
+                }
+                uint8[] png;
+                sq.save_to_buffer (out png, "png");
+                return new BytesIcon (new Bytes (png));
+            } catch (Error e) {
+                return null;
+            }
         }
 
         /**

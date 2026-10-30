@@ -92,7 +92,7 @@ namespace Redmine {
                 var me = App.get ().session != null ? App.get ().session.user_id : 0;
                 App.get ().poller.notification_icon.begin (0, me, (o, r) => {
                     var icon = App.get ().poller.notification_icon.end (r);
-                    if (icon != null) n.set_icon (new FileIcon (icon));
+                    if (icon != null) n.set_icon (icon);
                     App.get ().send_notification ("test", n);
                 });
             });
