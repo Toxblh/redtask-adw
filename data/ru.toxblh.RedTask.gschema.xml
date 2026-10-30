@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<schemalist gettext-domain="redmine-adw">
-  <schema id="ru.toxblh.RedmineAdw" path="/ru/toxblh/RedmineAdw/">
+<schemalist gettext-domain="redtask">
+  <schema id="ru.toxblh.RedTask" path="/ru/toxblh/RedTask/">
     <!-- учётка; сам ключ API — в Secret Service, не здесь -->
     <key name="server-url" type="s"><default>''</default></key>
     <key name="user-id" type="i"><default>0</default></key>

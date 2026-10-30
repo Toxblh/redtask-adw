@@ -16,7 +16,7 @@ namespace Redmine {
             cache = new DiskCache (server + "|" + user_id.to_string ());
             refs = new RefData (api, cache);
             // история уведомлений — данные, а не кэш: в ~/.local/share, рядом по имени каталога учётки
-            notifs = new NotifStore (Path.build_filename (Environment.get_user_data_dir (), "redmine-adw", Path.get_basename (cache.dir)));
+            notifs = new NotifStore (Path.build_filename (Environment.get_user_data_dir (), "redtask", Path.get_basename (cache.dir)));
         }
     }
 
@@ -28,9 +28,9 @@ namespace Redmine {
         public static App get () { return (App) GLib.Application.get_default (); }
 
         public App () {
-            // снимок (REDMINE_ADW_SHOT) — отдельным процессом, даже когда приложение уже запущено
+            // снимок (REDTASK_SHOT) — отдельным процессом, даже когда приложение уже запущено
             Object (application_id: Config.APP_ID, flags: ApplicationFlags.HANDLES_OPEN
-                | (Environment.get_variable ("REDMINE_ADW_SHOT") != null ? ApplicationFlags.NON_UNIQUE : 0));
+                | (Environment.get_variable ("REDTASK_SHOT") != null ? ApplicationFlags.NON_UNIQUE : 0));
         }
 
         construct {
@@ -57,9 +57,9 @@ namespace Redmine {
 
         public override void startup () {
             base.startup ();
-            Gtk.IconTheme.get_for_display (Gdk.Display.get_default ()).add_resource_path ("/ru/toxblh/RedmineAdw/icons");
+            Gtk.IconTheme.get_for_display (Gdk.Display.get_default ()).add_resource_path ("/ru/toxblh/RedTask/icons");
             var css = new Gtk.CssProvider ();
-            css.load_from_resource ("/ru/toxblh/RedmineAdw/style.css");
+            css.load_from_resource ("/ru/toxblh/RedTask/style.css");
             Gtk.StyleContext.add_provider_for_display (Gdk.Display.get_default (), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
             Prefs.get_default ().s.changed["run-in-background"].connect (sync_background);
             // фоновый запуск при входе в сеанс (--gapplication-service): activate не придёт, окна нет
@@ -91,7 +91,7 @@ namespace Redmine {
                 // та же ссылка вернулась сразу — браузер по умолчанию мы сами: не гоняем её по кругу
                 if (uri == last_forward && get_monotonic_time () - last_forward_at < 5 * 1000000) {
                     activate ();
-                    main_window ().toast (_("No web browser to open the link: Redmine itself is set as the default browser"), 5);
+                    main_window ().toast (_("No web browser to open the link: RedTask itself is set as the default browser"), 5);
                     return;
                 }
                 last_forward = uri;
@@ -134,8 +134,8 @@ namespace Redmine {
                 }
             }
             // разработческий вход без UI (скриншоты, проверка на живом сервере)
-            var dev_key = Environment.get_variable ("REDMINE_ADW_DEV_KEY");
-            var dev_server = Environment.get_variable ("REDMINE_ADW_DEV_SERVER");
+            var dev_key = Environment.get_variable ("REDTASK_DEV_KEY");
+            var dev_server = Environment.get_variable ("REDTASK_DEV_SERVER");
             if ((key == null || server == "") && dev_key != null && dev_server != null) {
                 try {
                     yield login (dev_server, dev_key);
@@ -264,7 +264,7 @@ namespace Redmine {
 
         private void on_about () {
             var d = new Adw.AboutDialog () {
-                application_name = _("Redmine"),
+                application_name = "RedTask",
                 application_icon = Config.APP_ID,
                 developer_name = "Anton Palgunov",
                 version = Config.VERSION,
@@ -288,7 +288,7 @@ namespace Redmine {
                     var opts = new VariantBuilder (new VariantType ("a{sv}"));
                     opts.add ("{sv}", "reason", new Variant.string (_("Check Redmine for new notifications")));
                     opts.add ("{sv}", "autostart", new Variant.boolean (on));
-                    string[] cmd = { "redmine-adw", "--gapplication-service" };
+                    string[] cmd = { "redtask", "--gapplication-service" };
                     opts.add ("{sv}", "commandline", new Variant.strv (cmd));
                     opts.add ("{sv}", "dbus-activatable", new Variant.boolean (false));
                     yield bus.call ("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
@@ -303,10 +303,10 @@ namespace Redmine {
             var path = Path.build_filename (dir, Config.APP_ID + ".desktop");
             if (!on) { FileUtils.unlink (path); return; }
             DirUtils.create_with_parents (dir, 0755);
-            string exe = "redmine-adw";
+            string exe = "redtask";
             try { exe = FileUtils.read_link ("/proc/self/exe"); } catch (Error e) {}
             try {
-                FileUtils.set_contents (path, "[Desktop Entry]\nType=Application\nName=Redmine\nExec=%s --gapplication-service\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n".printf (exe));
+                FileUtils.set_contents (path, "[Desktop Entry]\nType=Application\nName=RedTask\nExec=%s --gapplication-service\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n".printf (exe));
             } catch (Error e) {
                 warning ("autostart: %s", e.message);
             }
@@ -317,7 +317,7 @@ namespace Redmine {
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "");
     // запуск из каталога сборки: переводы лежат в build/po (tools/dev.sh)
-    Intl.bindtextdomain (Config.GETTEXT_PACKAGE, Environment.get_variable ("REDMINE_ADW_LOCALEDIR") ?? Config.LOCALEDIR);
+    Intl.bindtextdomain (Config.GETTEXT_PACKAGE, Environment.get_variable ("REDTASK_LOCALEDIR") ?? Config.LOCALEDIR);
     Intl.bind_textdomain_codeset (Config.GETTEXT_PACKAGE, "UTF-8");
     Intl.textdomain (Config.GETTEXT_PACKAGE);
     return new Redmine.App ().run (args);

@@ -1,6 +1,6 @@
 desktop = i18n.merge_file(
-  input: 'ru.toxblh.RedmineAdw.desktop.in',
-  output: 'ru.toxblh.RedmineAdw.desktop',
+  input: 'ru.toxblh.RedTask.desktop.in',
+  output: 'ru.toxblh.RedTask.desktop',
   type: 'desktop',
   po_dir: '../po',
   install: true,
@@ -8,20 +8,20 @@ desktop = i18n.merge_file(
 )
 
 metainfo = i18n.merge_file(
-  input: 'ru.toxblh.RedmineAdw.metainfo.xml.in',
-  output: 'ru.toxblh.RedmineAdw.metainfo.xml',
+  input: 'ru.toxblh.RedTask.metainfo.xml.in',
+  output: 'ru.toxblh.RedTask.metainfo.xml',
   po_dir: '../po',
   install: true,
   install_dir: get_option('datadir') / 'metainfo',
 )
 
-install_data('ru.toxblh.RedmineAdw.gschema.xml', install_dir: get_option('datadir') / 'glib-2.0' / 'schemas')
+install_data('ru.toxblh.RedTask.gschema.xml', install_dir: get_option('datadir') / 'glib-2.0' / 'schemas')
 # схема рядом со сборкой — для запуска без установки (GSETTINGS_SCHEMA_DIR=build/data)
-gnome.compile_schemas(build_by_default: true, depend_files: 'ru.toxblh.RedmineAdw.gschema.xml')
+gnome.compile_schemas(build_by_default: true, depend_files: 'ru.toxblh.RedTask.gschema.xml')
 
 install_subdir('icons/hicolor', install_dir: get_option('datadir') / 'icons')
 
-resources = gnome.compile_resources('resources', 'redmine-adw.gresource.xml', c_name: 'redmine')
+resources = gnome.compile_resources('resources', 'redtask.gresource.xml', c_name: 'redmine')
 
 desktop_utils = find_program('desktop-file-validate', required: false)
 if desktop_utils.found()

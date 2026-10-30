@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>ru.toxblh.RedmineAdw</id>
+  <id>ru.toxblh.RedTask</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>Redmine</name>
+  <name>RedTask</name>
   <summary>Native client for Redmine</summary>
   <description>
-    <p>Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting,
+    <p>RedTask is a client for Redmine. Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting,
     status changes, time tracking, attachments and background notifications.</p>
     <ul>
       <li>My issues, watched issues, favorites, projects and search</li>
@@ -15,11 +15,12 @@
       <li>Notifications about comments, mentions and changes</li>
       <li>Links to issues, projects and people of your server open in the app — with a link router such as Switchyard</li>
     </ul>
+    <p>RedTask is an independent project and is not affiliated with or endorsed by the Redmine project.</p>
   </description>
   <developer id="ru.toxblh">
     <name>Anton Palgunov</name>
   </developer>
-  <launchable type="desktop-id">ru.toxblh.RedmineAdw.desktop</launchable>
+  <launchable type="desktop-id">ru.toxblh.RedTask.desktop</launchable>
   <url type="homepage">https://altlinux.space/toxblh/redmine-adw</url>
   <screenshots>
     <screenshot type="default">

@@ -1,12 +1,12 @@
 [Desktop Entry]
-Name=Redmine
+Name=RedTask
 Comment=Issues, comments and notifications from Redmine
-Exec=redmine-adw %U
-Icon=ru.toxblh.RedmineAdw
+Exec=redtask %U
+Icon=ru.toxblh.RedTask
 Terminal=false
 Type=Application
 Categories=GNOME;GTK;Office;ProjectManagement;
-Keywords=redmine;issues;tasks;bug;tracker;
+Keywords=redtask;redmine;issues;tasks;bug;tracker;
 StartupNotify=true
 # не браузер по умолчанию: обработчик ссылок для маршрутизатора (Switchyard, Junction) — ссылки своего сервера
 MimeType=x-scheme-handler/http;x-scheme-handler/https;

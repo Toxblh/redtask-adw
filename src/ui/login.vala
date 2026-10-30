@@ -59,7 +59,7 @@ namespace Redmine {
             var about = new Gtk.MenuButton () { icon_name = "open-menu-symbolic", tooltip_text = _("Main Menu"), primary = true };
             var m = new Menu ();
             m.append (_("_Keyboard Shortcuts"), "app.shortcuts");
-            m.append (_("_About Redmine"), "app.about");
+            m.append (_("_About RedTask"), "app.about");
             about.menu_model = m;
             hb.pack_end (about);
             tv.add_top_bar (hb);
@@ -101,8 +101,8 @@ namespace Redmine {
     public WebKit.NetworkSession web_session () {
         var s = _web_session;
         if (s == null) {
-            var base_dir = Path.build_filename (Environment.get_user_data_dir (), "redmine-adw", "web");
-            var cache_dir = Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", "web");
+            var base_dir = Path.build_filename (Environment.get_user_data_dir (), "redtask", "web");
+            var cache_dir = Path.build_filename (Environment.get_user_cache_dir (), "redtask", "web");
             s = new WebKit.NetworkSession (base_dir, cache_dir);
             s.get_cookie_manager ().set_persistent_storage (Path.build_filename (base_dir, "cookies.sqlite"), WebKit.CookiePersistentStorage.SQLITE);
             s.get_cookie_manager ().set_accept_policy (WebKit.CookieAcceptPolicy.NO_THIRD_PARTY);

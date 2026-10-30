@@ -1,5 +1,5 @@
 /*
- * Кэши: диск (~/.cache/redmine-adw/<учётка>/) + память. Справочники — с TTL, списки и задачи —
+ * Кэши: диск (~/.cache/redtask/<учётка>/) + память. Справочники — с TTL, списки и задачи —
  * stale-while-revalidate: показываем сохранённое сразу, сеть обновляет фоном.
  */
 namespace Redmine {
@@ -13,7 +13,7 @@ namespace Redmine {
         /** Каталог привязан к учётке (сервер + пользователь): номера задач чужого сервера не смешиваются. */
         public DiskCache (string account) {
             var h = Checksum.compute_for_string (ChecksumType.SHA1, account).substring (0, 12);
-            dir = Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", h);
+            dir = Path.build_filename (Environment.get_user_cache_dir (), "redtask", h);
             DirUtils.create_with_parents (dir, 0700);
         }
 

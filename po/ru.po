@@ -1,14 +1,11 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: redmine-adw\n"
+"Project-Id-Version: redtask\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-
-msgid "Redmine"
-msgstr "Redmine"
 
 msgid "Native GNOME client for Redmine"
 msgstr "Нативный клиент Redmine для GNOME"
@@ -835,7 +832,7 @@ msgstr "Главное меню"
 msgid "_Keyboard Shortcuts"
 msgstr "_Комбинации клавиш"
 
-msgid "_About Redmine"
+msgid "_About RedTask"
 msgstr "_О приложении"
 
 msgid "Sign In"
@@ -1153,8 +1150,8 @@ msgstr "redmine;задачи;issues;баг;трекер;"
 msgid "Native client for Redmine"
 msgstr "Нативный клиент Redmine"
 
-msgid "Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting, status changes, time tracking, attachments and background notifications."
-msgstr "Работа с задачами Redmine с компьютера или телефона: списки, комментарии с разметкой Textile, смена статуса, учёт времени, вложения и фоновые уведомления."
+msgid "RedTask is a client for Redmine. Work with Redmine issues from the desktop or a phone: lists, comments with Textile formatting, status changes, time tracking, attachments and background notifications."
+msgstr "RedTask — клиент для Redmine. Работа с задачами Redmine с компьютера или телефона: списки, комментарии с разметкой Textile, смена статуса, учёт времени, вложения и фоновые уведомления."
 
 msgid "My issues, watched issues, favorites, projects and search"
 msgstr "Мои и отслеживаемые задачи, избранное, проекты и поиск"
@@ -1183,8 +1180,8 @@ msgstr "сегодня"
 msgid "Links to issues, projects and people of your server open in the app — with a link router such as Switchyard"
 msgstr "Ссылки на задачи, проекты и людей своего сервера открываются в приложении — через маршрутизатор ссылок, например Switchyard"
 
-msgid "No web browser to open the link: Redmine itself is set as the default browser"
-msgstr "Нечем открыть ссылку: браузером по умолчанию назначен сам Redmine"
+msgid "No web browser to open the link: RedTask itself is set as the default browser"
+msgstr "Нечем открыть ссылку: браузером по умолчанию назначен сам RedTask"
 
 msgid "Links"
 msgstr "Ссылки"
@@ -1193,8 +1190,8 @@ msgid "Open Server Links in the App"
 msgstr "Открывать ссылки сервера в приложении"
 
 #, c-format
-msgid "Issues, projects and people of %s. Choose Redmine for this domain in a link router such as Switchyard; other links go to the web browser"
-msgstr "Задачи, проекты и люди %s. Назначьте Redmine для этого домена в маршрутизаторе ссылок, например Switchyard; остальные ссылки уйдут в браузер"
+msgid "Issues, projects and people of %s. Choose RedTask for this domain in a link router such as Switchyard; other links go to the web browser"
+msgstr "Задачи, проекты и люди %s. Назначьте RedTask для этого домена в маршрутизаторе ссылок, например Switchyard; остальные ссылки уйдут в браузер"
 
 msgid "Get Switchyard"
 msgstr "Установить Switchyard"
@@ -1282,3 +1279,6 @@ msgstr[2] "%d из %d закрыто"
 
 msgid "Favorite Projects"
 msgstr "Избранные"
+
+msgid "RedTask is an independent project and is not affiliated with or endorsed by the Redmine project."
+msgstr "RedTask — независимый проект, не связанный с проектом Redmine и не одобренный им."

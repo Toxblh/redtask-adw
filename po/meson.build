@@ -1,1 +1,1 @@
-i18n.gettext('redmine-adw', preset: 'glib')
+i18n.gettext('redtask', preset: 'glib')

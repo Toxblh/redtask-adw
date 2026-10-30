@@ -1,5 +1,5 @@
-data/ru.toxblh.RedmineAdw.desktop.in
-data/ru.toxblh.RedmineAdw.metainfo.xml.in
+data/ru.toxblh.RedTask.desktop.in
+data/ru.toxblh.RedTask.metainfo.xml.in
 data/ui/window.ui
 src/api/client.vala
 src/api/models.vala

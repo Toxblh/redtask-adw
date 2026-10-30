@@ -35,7 +35,7 @@ namespace Redmine {
             var host = su?.get_host () ?? p.server_url;
             var open_links = new Adw.SwitchRow () {
                 title = _("Open Server Links in the App"),
-                subtitle = Markup.escape_text (_("Issues, projects and people of %s. Choose Redmine for this domain in a link router such as Switchyard; other links go to the web browser").printf (host)),
+                subtitle = Markup.escape_text (_("Issues, projects and people of %s. Choose RedTask for this domain in a link router such as Switchyard; other links go to the web browser").printf (host)),
             };
             p.s.bind ("open-server-links", open_links, "active", SettingsBindFlags.DEFAULT);
             links.add (open_links);

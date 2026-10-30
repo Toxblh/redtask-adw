@@ -1,6 +1,6 @@
 namespace Redmine {
 
-    [GtkTemplate (ui = "/ru/toxblh/RedmineAdw/ui/window.ui")]
+    [GtkTemplate (ui = "/ru/toxblh/RedTask/ui/window.ui")]
     public class Window : Adw.ApplicationWindow {
         [GtkChild] private unowned Adw.ToastOverlay toasts;
         [GtkChild] private unowned Gtk.Stack root_stack;
@@ -56,7 +56,7 @@ namespace Redmine {
                 sections_page.title = section_title.title;
                 current_section ()?.shown ();
             });
-            if (Environment.get_variable ("REDMINE_ADW_SHOT") != null) Shots.schedule (this);
+            if (Environment.get_variable ("REDTASK_SHOT") != null) Shots.schedule (this);
         }
 
         private void sync_narrow () {

@@ -1,4 +1,4 @@
-project('redmine-adw', ['c', 'vala'],
+project('redtask', ['c', 'vala'],
   version: '1.0.1',
   meson_version: '>= 1.0.0',
   license: 'GPL-3.0-or-later',
@@ -7,16 +7,16 @@ project('redmine-adw', ['c', 'vala'],
 i18n = import('i18n')
 gnome = import('gnome')
 
-app_id = 'ru.toxblh.RedmineAdw'
+app_id = 'ru.toxblh.RedTask'
 pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
 localedir = get_option('prefix') / get_option('localedir')
 
-add_project_arguments('-DGETTEXT_PACKAGE="redmine-adw"', '-DG_LOG_DOMAIN="RedmineAdw"', '-w', language: 'c')
+add_project_arguments('-DGETTEXT_PACKAGE="redtask"', '-DG_LOG_DOMAIN="RedTask"', '-w', language: 'c')
 
 conf = configuration_data()
 conf.set_quoted('APP_ID', app_id)
 conf.set_quoted('VERSION', meson.project_version())
-conf.set_quoted('GETTEXT_PACKAGE', 'redmine-adw')
+conf.set_quoted('GETTEXT_PACKAGE', 'redtask')
 conf.set_quoted('LOCALEDIR', localedir)
 configure_file(output: 'config.h', configuration: conf)
 add_project_arguments('-include', 'config.h', '-I' + meson.current_build_dir(), language: 'c')

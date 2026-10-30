@@ -1,9 +1,9 @@
 {
-  "id": "ru.toxblh.RedmineAdw",
+  "id": "ru.toxblh.RedTask",
   "runtime": "org.gnome.Platform",
   "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
-  "command": "redmine-adw",
+  "command": "redtask",
   "finish-args": [
     "--share=network",
     "--share=ipc",
@@ -15,7 +15,7 @@
   "cleanup": ["/include", "/lib/pkgconfig", "/share/vala", "*.la", "*.a"],
   "modules": [
     {
-      "name": "redmine-adw",
+      "name": "redtask",
       "buildsystem": "meson",
       "sources": [
         { "type": "dir", "path": "." }

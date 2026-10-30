@@ -122,7 +122,7 @@ namespace Redmine {
             // 6 соединений, как у браузера (по умолчанию 2): страницы проектов качаются параллельно
             session = (Soup.Session) Object.new (typeof (Soup.Session), "max-conns-per-host", 6);
             session.timeout = 40;
-            session.user_agent = "RedmineAdw/" + Config.VERSION + " (GNOME)";
+            session.user_agent = "RedTask/" + Config.VERSION + " (GNOME)";
             var waf = WafGate.get_default ();
             apply_browser (waf);
             waf.notify["browser-agent"].connect (() => apply_browser (waf));

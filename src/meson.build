@@ -39,7 +39,7 @@ app_deps = [
   meson.get_compiler('c').find_library('m'),
 ]
 
-executable('redmine-adw', app_sources, resources,
+executable('redtask', app_sources, resources,
   vala_args: ['--target-glib=2.80', '--gresourcesdir=' + meson.project_source_root() / 'data', files('config.vapi')],
   dependencies: app_deps,
   install: true,

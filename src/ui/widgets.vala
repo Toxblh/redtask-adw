@@ -304,7 +304,7 @@ namespace Redmine {
     /** Куда open_attachment кладёт скачанный файл. */
     string open_path (Json.Object att) {
         var safe = Path.get_basename (jstr (att, "filename")).replace ("/", "_");
-        return Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", "open", jint (att, "id").to_string (), safe != "" ? safe : "file");
+        return Path.build_filename (Environment.get_user_cache_dir (), "redtask", "open", jint (att, "id").to_string (), safe != "" ? safe : "file");
     }
 
     /** Миниатюра, встроенная в уже скачанный документ (spec 4.1); файла нет — null. Разбор zip — в отдельном потоке. */
@@ -446,7 +446,7 @@ namespace Redmine {
             if (s == null) return;
             try {
                 var b = yield s.api.download (jstr (att, "content_url"));
-                var dir = Path.build_filename (Environment.get_user_cache_dir (), "redmine-adw", "open", jint (att, "id").to_string ());
+                var dir = Path.build_filename (Environment.get_user_cache_dir (), "redtask", "open", jint (att, "id").to_string ());
                 DirUtils.create_with_parents (dir, 0700);
                 var path = Path.build_filename (dir, Path.get_basename (jstr (att, "filename")));
                 FileUtils.set_data (path, b.get_data ());

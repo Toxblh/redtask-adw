@@ -1,4 +1,4 @@
-# GNOME HIG и libadwaita 1.9: выжимка для redmine-adw
+# GNOME HIG и libadwaita 1.9: выжимка для redtask
 
 Здесь только правила, которые мы применяем. Сверено с HIG (developer.gnome.org/hig),
 исходниками и документацией libadwaita main и локальным `libadwaita-1.vapi` (1.9.0).
