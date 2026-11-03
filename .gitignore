@@ -6,3 +6,5 @@ flatpak-repo/
 epm.lock
 *.flatpak
 build-flatpak/
+build-ci/
+.ci-flatpak.*

@@ -1,0 +1,100 @@
+name: flatpak
+# Собирает flatpak RedTask (GNOME) на каждый push в master и публикует:
+# - OSTree-репозиторий в ветку `flatpak` (raw-ссылки) — установка и обновления через flatpakref;
+# - Forgejo-релиз с .flatpak-бандлом и flatpakref.
+on:
+  push:
+    branches: [master]
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+jobs:
+  flatpak:
+    runs-on: als-huge
+    timeout-minutes: 60
+    container:
+      image: node:24-bookworm
+    steps:
+      - name: checkout
+        # actions/checkout v4.4.0, pinned to the validated ALS commit.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: инструменты
+        run: |
+          set -Eeuo pipefail
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends flatpak jq >/dev/null
+
+      - name: сборка
+        # flatpak-builder на общих раннерах не работает (нет FUSE и bwrap) — см. tools/ci-flatpak.sh.
+        run: |
+          git config --global --add safe.directory "$PWD"
+          FLATPAK_REPO="$PWD/flatpak-repo" tools/ci-flatpak.sh
+
+      - name: publish flatpak-репозиторий в ветку flatpak
+        # Установка: flatpak install --user <server>/<repo>/raw/branch/flatpak/redtask.flatpakref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          SERVER: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          token="${RELEASE_TOKEN:-$GH_TOKEN}"
+          base="$SERVER/$REPO/raw/branch/flatpak"
+          cd flatpak-repo
+          rm -rf tmp .lock
+          cat > redtask.flatpakref <<REF
+          [Flatpak Ref]
+          Title=RedTask
+          Name=ru.toxblh.RedTask
+          Branch=stable
+          Url=$base/
+          SuggestRemoteName=redtask
+          Homepage=$SERVER/$REPO
+          RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
+          IsRuntime=false
+          REF
+          cat > redtask.flatpakrepo <<REPOF
+          [Flatpak Repo]
+          Title=RedTask
+          Url=$base/
+          Homepage=$SERVER/$REPO
+          REPOF
+          sed -i 's/^ *//' redtask.flatpakref redtask.flatpakrepo
+          git init -q -b flatpak
+          git -c user.name=ci -c user.email=ci@redtask.local add -A
+          git -c user.name=ci -c user.email=ci@redtask.local commit -q -m "flatpak repo for ${GITHUB_SHA:0:8}"
+          host="${SERVER#https://}"
+          git push -q --force "https://x-access-token:${token}@${host}/${REPO}.git" flatpak:refs/heads/flatpak
+          cp redtask.flatpakref "$GITHUB_WORKSPACE/build-ci/"
+          echo "::notice::flatpak install --user $base/redtask.flatpakref"
+
+      - name: publish forgejo release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          API_BASE: ${{ github.server_url }}/api/v1
+          REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          token="${RELEASE_TOKEN:-$GH_TOKEN}"
+          version=$(sed -n "s/^  version: '\(.*\)',/\1/p" meson.build)
+          tag="gnome-${version}-${COMMIT_SHA:0:8}"
+          cd build-ci
+          sha256sum redtask-*.flatpak > SHA256SUMS
+          cat SHA256SUMS
+          body=$(jq -nc --arg t "$tag" --arg c "$COMMIT_SHA" \
+            '{tag_name:$t,target_commitish:$c,name:$t,body:"RedTask для GNOME (flatpak.yml). Установка с обновлениями: flatpak install --user redtask.flatpakref",draft:false,prerelease:true}')
+          rid=$(curl -fsS --show-error -X POST -H "Authorization: token $token" -H 'Content-Type: application/json' \
+            -d "$body" "$API_BASE/repos/$REPO/releases" | jq -r '.id')
+          case "$rid" in ''|*[!0-9]*) echo "unexpected release id: $rid" >&2; exit 1 ;; esac
+          for f in redtask-*.flatpak redtask.flatpakref SHA256SUMS; do
+            curl -fsS --show-error -X POST -H "Authorization: token $token" -F "attachment=@$f" \
+              "$API_BASE/repos/$REPO/releases/$rid/assets?name=$f" >/dev/null
+            echo "uploaded $f"
+          done
+          echo "::notice::${{ github.server_url }}/$REPO/releases/tag/$tag"
