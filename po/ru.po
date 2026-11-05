@@ -625,6 +625,9 @@ msgstr "Затрачено"
 msgid "Updated"
 msgstr "Обновлена"
 
+msgid "Closed on"
+msgstr "Закрыта"
+
 msgid "No description"
 msgstr "Без описания"
 

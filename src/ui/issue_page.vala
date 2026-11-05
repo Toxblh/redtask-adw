@@ -599,6 +599,7 @@ namespace Redmine {
                 pr_row.activated.connect (() => win ()?.open_issue (pid, 0, true));
             }
             prop (props, _("Updated"), format_datetime (i.updated_on));
+            if (i.status_closed && i.closed_on != "") prop (props, _("Closed on"), format_datetime (i.closed_on));
             var blocks = new GenericArray<Json.Object> ();
             var labels = jobj (i.o, "_cf_labels");
             foreach (var cf in i.custom_fields) {
@@ -606,7 +607,7 @@ namespace Redmine {
                 if (val.strip () == "") continue;
                 // длинное, многострочное или с блочной разметкой — Textile-блоком ниже, как на Android/сайте
                 if (cf.get_member ("value").get_node_type () != Json.NodeType.ARRAY && is_block_value (val)) blocks.add (cf);
-                else prop (props, jstr (cf, "name"), val);
+                else prop (props, jstr (cf, "name"), /^\d{4}-\d{2}-\d{2}$/.match (val) ? format_date (val) : val);
             }
             if (can_edit ()) {
                 st.activatable = true;
@@ -808,6 +809,8 @@ namespace Redmine {
             }
             if (field == "done_ratio") return v + " %";
             if (field == "parent_id") return "#" + v;
+            // даты (start_date, due_date, поля-даты) — как в карточке, а не «2026-09-03»
+            if (/^\d{4}-\d{2}-\d{2}$/.match (v)) return format_date (v);
             return v.char_count () > 120 ? v.substring (0, v.index_of_nth_char (120)) + "…" : v;
         }
 
