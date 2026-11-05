@@ -65,6 +65,8 @@ void test_inline () {
     assert (inline_markup ("\"сайт\":https://x.ru") == "<a href=\"https://x.ru\">сайт</a>");
     assert (inline_markup ("@code@") .contains ("monospace"));
     assert (inline_markup ("a < b & c") == "a &lt; b &amp; c");
+    assert (inline_markup ("в проекте project:PR, трекер") == "в проекте <a href=\"/projects/pr\">PR</a>, трекер");
+    assert (inline_markup ("myproject:x") == "myproject:x");
     // упоминание с известным логином — ссылка на человека
     string? look (string l) { return l == "ivanov" ? "42|Иван Иванов" : null; }
     // как на сайте: именем без «@»

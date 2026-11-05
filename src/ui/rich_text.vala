@@ -205,11 +205,19 @@ namespace Redmine {
                     var m = Textile.inline_markup (c.text, lookup);
                     var just = c.xalign == 0.5f ? Gtk.Justification.CENTER : (c.xalign == 1 ? Gtk.Justification.RIGHT : Gtk.Justification.LEFT);
                     Gtk.Widget cell;
-                    if (m.contains ("class=\"mention\"")) {
+                    // ячейка в несколько строк (п. 7) — обычный блок текста: списки, ссылки, переносы
+                    bool multi = false;
+                    if (cells != null) {
+                        var ls = Textile.parse (c.text);
+                        multi = ls.length > 1 || (ls.length == 1 && ls[0].kind != Textile.Kind.PLAIN);
+                    }
+                    if (multi || m.contains ("class=\"mention\"")) {
                         // упоминание — пилюля-виджет, а в GtkLabel виджет не вставить: ячейка-FlowView
                         var fv = new FlowView () { hexpand = false, justification = just };
+                        // колонка не уже самого длинного слова (п. 7) — слово не рвём
+                        if (cells != null) fv.wrap_mode = Gtk.WrapMode.WORD;
                         fv.link_activated.connect (on_link);
-                        fv.add_cell (m);
+                        if (multi || cells != null) fv.add_text (c.text, lookup); else fv.add_cell (m);
                         cell = fv;
                     } else {
                         // пустая ячейка — пробелом: строка «|  |  |» держит высоту строки, как на сайте
@@ -231,7 +239,7 @@ namespace Redmine {
                     if (c.header) cell.add_css_class ("rich-th");
                     var cls = cell_class (c);
                     if (cls != null) cell.add_css_class (cls);
-                    if (cells != null) cells.add (cell, c.text, c.col, r);
+                    if (cells != null) cells.add (cell, c.col, r);
                     else grid.attach (cell, c.col, r, c.span, c.rowspan);
                 }
                 r++;
@@ -408,10 +416,12 @@ namespace Redmine {
 
         construct { add_css_class ("rich-table"); }
 
-        public void add (Gtk.Widget w, string text, int col, int row) {
+        public void add (Gtk.Widget w, int col, int row) {
             w.set_parent (this);
             cells.add (w);
-            texts += text;
+            // замер — по видимому тексту, не по исходнику: «"текст":/длинный/адрес» узкий
+            var fv = w as FlowView;
+            texts += fv != null ? fv.visible_text () : ((Gtk.Label) w).get_text ();
             cols += col;
             rows += row;
             ncols = int.max (ncols, col + 1);
@@ -434,13 +444,15 @@ namespace Redmine {
                 w.measure (Gtk.Orientation.HORIZONTAL, -1, out cm, out cn, null, null);
                 var lay = w.create_pango_layout (texts[i]);
                 lay.get_pixel_size (out pw, out ph);
-                foreach (var t in texts[i].split (" ")) {
+                foreach (var t in texts[i].replace ("\u2028", "\n").split_set (" \n")) {
                     int tw;
                     lay.set_text (t, -1);
                     lay.get_pixel_size (out tw, out ph);
                     word = int.max (word, tw);
                 }
                 var c = cols[i];
+                // TextView держит место под каретку — пара пикселей сверх текста
+                if (w is FlowView) { word += 2; pw += 2; }
                 mins[c] = double.max (mins[c], int.max (word + PAD, cm));
                 maxs[c] = double.max (maxs[c], double.max (pw + PAD, mins[c]));
             }
@@ -728,6 +740,16 @@ namespace Redmine {
             buffer.insert (ref e, "\u200B", -1);
         }
 
+        /** Ячейка таблицы как блок Textile: абзацы и списки; ширину даёт таблица. ponytail: таблица и картинка внутри ячейки не рисуются. */
+        public void add_text (string text, Textile.MentionLookup? lookup) {
+            Textile.Block? prev = null;
+            foreach (var b in Textile.group (Textile.parse (text))) {
+                if (!Textile.is_flow (b)) continue;
+                add_block (b, 0, Textile.gap_before (prev, b), lookup);
+                prev = b;
+            }
+        }
+
         /** Ячейка таблицы с упоминанием: текст и ширина по содержимому (TextView сам ширину не просит). */
         public void add_cell (string markup) {
             put_markup (markup);
@@ -843,6 +865,16 @@ namespace Redmine {
         private string selected_text () {
             Gtk.TextIter a, z;
             if (!buffer.get_selection_bounds (out a, out z)) return "";
+            return text_between (a, z);
+        }
+
+        public string visible_text () {
+            Gtk.TextIter a, z;
+            buffer.get_bounds (out a, out z);
+            return text_between (a, z);
+        }
+
+        private string text_between (Gtk.TextIter a, Gtk.TextIter z) {
             var sb = new StringBuilder ();
             for (var it = a; it.compare (z) < 0; it.forward_char ()) {
                 var anc = it.get_child_anchor ();

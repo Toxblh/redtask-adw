@@ -4,12 +4,14 @@ namespace Redmine {
      * окно рендерится само в PNG (Wayland не даёт снимать чужие окна) и приложение выходит.
      * REDTASK_SHOT_SIZE=ШxВ, REDTASK_SHOT_ISSUE=номер — открыть задачу, REDTASK_SHOT_SECTION=имя раздела.
      * REDTASK_SHOT_PERSON=id — открыть карточку человека. REDTASK_SHOT_LINK=адрес — открыть как ссылку своего сервера.
-     * REDTASK_SHOT_FULL=1 — ещё и экран задачи целиком, без обрезки прокруткой: путь.png.full.png.
+     * REDTASK_SHOT_FULL=1 — ещё и экран задачи (или текст REDTASK_SHOT_TEXT) целиком, без обрезки прокруткой: путь.png.full.png.
      * REDTASK_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDTASK_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
      */
     namespace Shots {
+        private Gtk.Widget? text_shot = null;
+
         public void schedule (Window w) {
             // мигающий курсор в поле ввода держит окно в перерисовке — снимок выходит пустым
             Gtk.Settings.get_default ().gtk_cursor_blink = false;
@@ -32,6 +34,7 @@ namespace Redmine {
                     FileUtils.get_contents (text_file, out t);
                     var rt = new RichText (t) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
                     w.content = new Gtk.ScrolledWindow () { child = rt, hscrollbar_policy = Gtk.PolicyType.NEVER };
+                    text_shot = rt;
                 } catch (Error e) { warning ("shot: %s", e.message); }
                 return Source.REMOVE;
             });
@@ -77,7 +80,7 @@ namespace Redmine {
                 debug ("shot: frames in the last second: %d", ticks);
                 save (w, Environment.get_variable ("REDTASK_SHOT"));
                 var page = w.visible_issue ();
-                var clamp = page != null && Environment.get_variable ("REDTASK_SHOT_FULL") != null ? find_clamp (page) : null;
+                var clamp = Environment.get_variable ("REDTASK_SHOT_FULL") == null ? null : text_shot ?? (page != null ? find_clamp (page) : null);
                 if (clamp != null) save (clamp, Environment.get_variable ("REDTASK_SHOT") + ".full.png");
                 var d = w.visible_dialog;
                 if (d != null) {

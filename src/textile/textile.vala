@@ -16,7 +16,7 @@ namespace Textile {
     // ponytail: строка длиннее — без инлайн-разметки, текстом как написана (лог или base64 одной строкой)
     private const int MAX_INLINE = 20000;
 
-    private Regex? _issue; private Regex? _mention; private Regex? _userref; private Regex? _tlink; private Regex? _url;
+    private Regex? _issue; private Regex? _mention; private Regex? _userref; private Regex? _projref; private Regex? _tlink; private Regex? _url;
     private Regex? _bold; private Regex? _italic; private Regex? _strike; private Regex? _under; private Regex? _cite;
     private Regex? _sup; private Regex? _sub; private Regex? _code; private Regex? _macro; private Regex? _img;
     private Regex? _hr; private Regex? _heading; private Regex? _list; private Regex? _bq; private Regex? _collapse;
@@ -38,6 +38,8 @@ namespace Textile {
         // логин не кончается на «.» / «-»: «@ivanov.» в конце фразы — это ivanov
         _mention = re ("(?<![" + W + "@])@(" + LOGIN + ")");
         _userref = re ("(?<![" + W + "/#:.@-])user(?:#(\\d+)|:(" + LOGIN + "))(?![" + W + "])");
+        // project:ident и project#id — ссылка на проект, текстом идентификатор (имени без запроса не знаем)
+        _projref = re ("(?<![" + W + "/#:.@-])project(?:#(\\d+)|:([a-zA-Z][a-zA-Z0-9_\\-]*))(?![" + W + "])");
         _tlink = re ("\"([^\"\\n]+)\":((?:https?|ftp)://[^\\s<>\"']+|mailto:[^\\s<>\"']+|/[^\\s<>\"']*)");
         _url = re ("https?://[^\\s<>\"']+");
         _wiki = re ("\\[\\[[^\\[\\]\\n]+\\]\\]");
@@ -809,6 +811,11 @@ namespace Textile {
             } else if (id != "") {
                 spans.add (new Span (s, e, "person", mi.fetch (0), id)); // имени не знаем — ссылка как написана
             }
+        } while (next (mi));
+        if (_projref.match (line, 0, out mi)) do {
+            mi.fetch_pos (0, out s, out e);
+            var ident = (mi.fetch (2) ?? "") != "" ? mi.fetch (2) : mi.fetch (1);
+            spans.add (new Span (s, e, "url", (mi.fetch (2) ?? "") != "" ? ident : mi.fetch (0), "/projects/" + ident.down ()));
         } while (next (mi));
         if (_tlink.match (line, 0, out mi)) do {
             mi.fetch_pos (0, out s, out e);
