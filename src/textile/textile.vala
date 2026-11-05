@@ -276,14 +276,26 @@ namespace Textile {
         public bool is_blank () { return kind == Kind.PLAIN && text.strip () == ""; }
     }
 
-    /** ponytail: режем по «|» в лоб — «|» внутри @кода@ разобьёт ячейку; токенизатор, если встретится */
+    /** Ячейки по «|» вне [[…]] (PARITY 7). ponytail: «|» внутри @кода@ всё ещё делит ячейку. */
+    private string[] split_cells (string t) {
+        string[] res = {};
+        int from = 0, depth = 0;
+        for (int k = 0; k < t.length; k++) {
+            if (t[k] == '[' && k + 1 < t.length && t[k + 1] == '[') { depth++; k++; }
+            else if (t[k] == ']' && k + 1 < t.length && t[k + 1] == ']' && depth > 0) { depth--; k++; }
+            else if (t[k] == '|' && depth == 0 && res.length < MAX_CELLS - 1) { res += t.substring (from, k - from); from = k + 1; }
+        }
+        res += t.substring (from);
+        return res;
+    }
+
     public GenericArray<Cell> parse_cells (string line) {
         init ();
         var t = line.strip ();
         if (t.has_prefix ("|")) t = t.substring (1);
         if (t.has_suffix ("|")) t = t.substring (0, t.length - 1);
         var res = new GenericArray<Cell> ();
-        foreach (var raw in t.split ("|", MAX_CELLS)) {
+        foreach (var raw in split_cells (t)) {
             var r = raw.strip ();
             MatchInfo mi;
             // модификаторы — сразу за «|»: «| {color:red}. x» RedCloth оставляет текстом
@@ -306,6 +318,13 @@ namespace Textile {
             else if (bare.contains ("<")) c.xalign = 0;
             res.add (c);
         }
+        return res;
+    }
+
+    /** Строки таблиц текста ячейками — набор textile_table. */
+    public GenericArray<GenericArray<Cell>> table_rows (string src) {
+        var res = new GenericArray<GenericArray<Cell>> ();
+        foreach (var l in parse (src)) if (l.kind == Kind.ROW) res.add (l.cells);
         return res;
     }
 
@@ -499,7 +518,12 @@ namespace Textile {
                     // оглавление не рисуем
                 } else {
                     MatchInfo om;
-                    if (!_preopen.match (line, 0, out om)) p.text (line);
+                    // строка таблицы в несколько строк текста (PARITY 7): до строки, что кончается «|»; пустая — обрыв
+                    if (t.has_prefix ("|")) {
+                        var row = line;
+                        while (!row.chomp ().has_suffix ("|") && i < src.length && src[i].strip () != "") row += "\n" + src[i++];
+                        p.text (row);
+                    } else if (!_preopen.match (line, 0, out om)) p.text (line);
                     else {
                         int s, e;
                         om.fetch_pos (0, out s, out e);

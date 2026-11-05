@@ -429,4 +429,81 @@ namespace Redmine {
         foreach (var st in seen) if (cols.contains (st)) res.add (cols[st]);
         return res;
     }
+    /** Ключи выбранных аватаров (как в assignee_filter, пусто — все) и поиск по доске: номер с начала или начало слова темы (набор board_filter). */
+    public GenericArray<Issue> board_filter (GenericArray<Issue> issues, int me, string[] assignees, string query) {
+        var q = fold (query.strip ());
+        var digits = /^#?\d+$/.match (q);
+        if (digits && q.has_prefix ("#")) q = q.substring (1);
+        var res = new GenericArray<Issue> ();
+        foreach (var i in issues) {
+            if (assignees.length > 0 && !(assignee_key (i, me) in assignees)) continue;
+            if (q != "" && !(digits ? i.id.to_string ().has_prefix (q) || i.subject.contains (q) : word_prefix (fold (i.subject), q) || (q.contains (" ") && fold (i.subject).contains (q)))) continue;
+            res.add (i);
+        }
+        return res;
+    }
+
+    /** Какое-то слово текста начинается с q: «ел» находит «Ёлка», но не «Релиз». */
+    private bool word_prefix (string text, string q) {
+        foreach (var w in Regex.split_simple ("[^\\p{L}\\p{N}]+", text)) if (w.has_prefix (q)) return true;
+        return false;
+    }
+
+    /** Сравнение людей и тем: без регистра, ё = е. */
+    public string fold (string s) { return s.casefold ().replace ("ё", "е"); }
+
+    /** Запрос @упоминания по тексту до курсора (символы) — набор mention_query; нет — null. */
+    public string? mention_query (string text, int cursor) {
+        var end = text.index_of_nth_char (int.min (cursor, text.char_count ()));
+        int at = end;
+        unichar c = 0;
+        while (at > 0) {
+            int prev = at;
+            text.get_prev_char (ref prev, out c);
+            if (!(c.isalnum () || c == '_' || c == '.' || c == '-')) break;
+            at = prev;
+        }
+        int before = at;
+        if (at == 0 || !text.get_prev_char (ref before, out c) || c != '@') return null;
+        int pre = before;
+        if (pre > 0 && text.get_prev_char (ref pre, out c) && (c.isalnum () || c == '_' || c == '@')) return null;
+        return text.substring (at, end - at);
+    }
+
+    private bool person_prefix (Json.Object p, string q) {
+        if (fold (jstr (p, "login")).has_prefix (q)) return true;
+        foreach (var w in fold (jstr (p, "name")).split (" ")) if (w.has_prefix (q)) return true;
+        return false;
+    }
+
+    /**
+     * Кандидаты @упоминания ({id, name, login}) — набор mention_candidates: люди задачи, затем остальные;
+     * в каждой группе сначала совпадение с начала логина или слова имени, потом подстрока; без повторов, не больше limit.
+     */
+    public GenericArray<Json.Object> mention_candidates (GenericArray<Json.Object> participants, GenericArray<Json.Object> people, string query, int limit) {
+        var q = fold (query);
+        var res = new GenericArray<Json.Object> ();
+        var seen = new GenericSet<int> (direct_hash, direct_equal);
+        GenericArray<Json.Object>[] groups = { participants, people };
+        foreach (var g in groups) {
+            if (q == "" && g == people) break;
+            for (int pass = 0; pass < 2; pass++) foreach (var p in g) {
+                if (res.length >= limit) return res;
+                var id = jint (p, "id");
+                if (seen.contains (id)) continue;
+                bool hit = q == "" || (pass == 0 ? person_prefix (p, q)
+                    : fold (jstr (p, "name")).contains (q) || fold (jstr (p, "login")).contains (q));
+                if (hit) { seen.add (id); res.add (p); }
+            }
+        }
+        return res;
+    }
+
+    /** Недавние в поиске: открытая задача — первой, без повтора, не больше 10 (набор recent_opened). */
+    public int[] recent_opened (int[] list, int id) {
+        int[] res = { id };
+        foreach (var x in list) if (x != id && res.length < 10) res += x;
+        return res;
+    }
+
 }

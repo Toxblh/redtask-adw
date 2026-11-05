@@ -181,11 +181,24 @@ namespace Redmine {
         return v;
     }
 
-    /** Встроенная миниатюра ODF/OOXML (spec 4.1): zip по центральному каталогу, stored и deflate; нет или не zip — null. */
-    public Bytes? embedded_thumbnail (Bytes data) {
-        unowned uint8[] d = data.get_data ();
+    /** Запись миниатюры в zip: имя, смещение локального заголовка в файле, размеры и метод сжатия. */
+    public class ZipEntry : Object {
+        public string name;
+        public int64 local_offset;
+        public uint32 compressed_size;
+        public uint32 size;
+        public uint32 method;
+    }
+
+    /**
+     * Запись миниатюры по хвосту файла размера size (Range: bytes=-N, spec 4.1, набор zip_tail): EOCD,
+     * центральный каталог целиком в хвосте; ODF — Thumbnails/thumbnail.png, OOXML — docProps/thumbnail.jpeg|jpg|png.
+     */
+    public ZipEntry? zip_tail_entry (int64 size, Bytes tail) {
+        unowned uint8[] d = tail.get_data ();
         size_t len = d.length;
-        if (len < 22) return null;
+        int64 base_off = size - (int64) len;
+        if (len < 22 || base_off < 0) return null;
         // конец центрального каталога: с конца, комментарий до 64 КБ
         size_t eocd = 0;
         bool found = false;
@@ -195,38 +208,54 @@ namespace Redmine {
         }
         if (!found) return null;
         var count = le (d, eocd + 10, 2);
-        size_t at = le (d, eocd + 16, 4);
+        var cd = (int64) le (d, eocd + 16, 4) - base_off;
+        if (cd < 0) return null;
+        size_t at = (size_t) cd;
         string[] want = { "Thumbnails/thumbnail.png", "docProps/thumbnail.jpeg", "docProps/thumbnail.jpg", "docProps/thumbnail.png" };
         int best = want.length;
-        uint32 method = 0, csize = 0, usize = 0, local = 0;
+        ZipEntry? res = null;
         for (uint k = 0; k < count; k++) {
             if (at + 46 > len || le (d, at, 4) != 0x02014b50) return null;
             var nlen = le (d, at + 28, 2);
             if (at + 46 + nlen > len) return null;
             for (int w = 0; w < best; w++) if (nlen == want[w].length && Memory.cmp (&d[at + 46], want[w], nlen) == 0) {
                 best = w;
-                method = le (d, at + 10, 2);
-                csize = le (d, at + 20, 4);
-                usize = le (d, at + 24, 4);
-                local = le (d, at + 42, 4);
+                res = new ZipEntry () {
+                    name = want[w], method = le (d, at + 10, 2), compressed_size = le (d, at + 20, 4),
+                    size = le (d, at + 24, 4), local_offset = le (d, at + 42, 4),
+                };
             }
             at += 46 + nlen + le (d, at + 30, 2) + le (d, at + 32, 2);
         }
-        if (best == want.length || (size_t) local + 30 > len || le (d, local, 4) != 0x04034b50) return null;
-        size_t start = (size_t) local + 30 + le (d, local + 26, 2) + le (d, local + 28, 2);
-        if (start + csize > len) return null;
-        var raw = new Bytes (d[start : start + csize]);
-        if (method == 0) return raw;
-        if (method != 8) return null;
+        return res;
+    }
+
+    /** Данные записи по байтам от её локального заголовка: stored или deflate; не сходится — null. */
+    public Bytes? zip_entry_data (ZipEntry e, Bytes local) {
+        unowned uint8[] d = local.get_data ();
+        size_t len = d.length;
+        if (len < 30 || le (d, 0, 4) != 0x04034b50) return null;
+        size_t start = 30 + le (d, 26, 2) + le (d, 28, 2);
+        if (start + e.compressed_size > len) return null;
+        var raw = new Bytes (d[start : start + e.compressed_size]);
+        if (e.method == 0) return raw;
+        if (e.method != 8) return null;
         try {
             var conv = new ConverterInputStream (new MemoryInputStream.from_bytes (raw), new ZlibDecompressor (ZlibCompressorFormat.RAW));
             var out = new MemoryOutputStream.resizable ();
             out.splice (conv, OutputStreamSpliceFlags.CLOSE_SOURCE | OutputStreamSpliceFlags.CLOSE_TARGET);
             var res = out.steal_as_bytes ();
-            return res.get_size () == usize ? res : null;
-        } catch (Error e) {
+            return res.get_size () == e.size ? res : null;
+        } catch (Error err) {
             return null;
         }
+    }
+
+    /** Встроенная миниатюра ODF/OOXML (spec 4.1) из целого файла; нет или не zip — null. */
+    public Bytes? embedded_thumbnail (Bytes data) {
+        var e = zip_tail_entry (data.get_size (), data);
+        if (e == null || e.local_offset >= data.get_size ()) return null;
+        return zip_entry_data (e, data.slice ((size_t) e.local_offset, data.get_size ()));
     }
 }
 

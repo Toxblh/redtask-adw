@@ -73,6 +73,7 @@ GenericArray<Issue> issues_of (Json.Array a) {
     foreach (var c in objs (a)) {
         var o = new Json.Object ();
         o.set_int_member ("id", c.get_int_member ("id"));
+        if (c.has_member ("subject")) o.set_string_member ("subject", c.get_string_member ("subject"));
         if (c.has_member ("assignee") && !c.get_member ("assignee").is_null ()) o.set_object_member ("assigned_to", c.get_object_member ("assignee"));
         if (c.has_member ("status")) {
             var st = new Json.Object ();
@@ -166,6 +167,77 @@ void test_table_columns () {
     }
 }
 
+string[] strs (Json.Array a) {
+    string[] res = {};
+    foreach (var n in a.get_elements ()) res += n.get_string ();
+    return res;
+}
+
+void test_mention_query () {
+    foreach (var c in objs (spec.get_object_member ("mention_query").get_array_member ("cases"))) {
+        var want = c.get_member ("query").is_null () ? null : c.get_string_member ("query");
+        assert_cmpstr (mention_query (c.get_string_member ("text"), (int) c.get_int_member ("cursor")), CompareOperator.EQ, want);
+    }
+}
+
+void test_mention_candidates () {
+    var v = spec.get_object_member ("mention_candidates");
+    var parts = objs (v.get_array_member ("participants"));
+    var people = objs (v.get_array_member ("people"));
+    foreach (var c in objs (v.get_array_member ("cases"))) {
+        var got = mention_candidates (parts, people, c.get_string_member ("query"), (int) c.get_int_member ("limit"));
+        var want = ints (c.get_array_member ("ids"));
+        assert_cmpint (got.length, CompareOperator.EQ, want.length);
+        for (int k = 0; k < want.length; k++) assert_cmpint (jint (got[k], "id"), CompareOperator.EQ, want[k]);
+    }
+}
+
+void test_recent_opened () {
+    foreach (var c in objs (spec.get_object_member ("recent_opened").get_array_member ("cases"))) {
+        var got = recent_opened (ints (c.get_array_member ("list")), (int) c.get_int_member ("open"));
+        var want = ints (c.get_array_member ("out"));
+        assert_cmpint (got.length, CompareOperator.EQ, want.length);
+        for (int k = 0; k < want.length; k++) assert_cmpint (got[k], CompareOperator.EQ, want[k]);
+    }
+}
+
+void test_board_filter () {
+    var v = spec.get_object_member ("board_filter");
+    var me = (int) v.get_int_member ("me");
+    var issues = issues_of (v.get_array_member ("issues"));
+    foreach (var c in objs (v.get_array_member ("cases")))
+        assert_ids (board_filter (issues, me, strs (c.get_array_member ("assignees")), c.get_string_member ("query")), c.get_array_member ("ids"));
+}
+
+void test_zip_tail () {
+    foreach (var c in objs (spec.get_object_member ("zip_tail").get_array_member ("cases"))) {
+        var got = zip_tail_entry (c.get_int_member ("size"), new Bytes (Base64.decode (c.get_string_member ("tail"))));
+        if (c.get_member ("entry").is_null ()) { assert (got == null); continue; }
+        var e = c.get_object_member ("entry");
+        assert (got != null);
+        assert_cmpstr (got.name, CompareOperator.EQ, e.get_string_member ("name"));
+        assert_cmpint ((int) got.local_offset, CompareOperator.EQ, (int) e.get_int_member ("local_offset"));
+        assert_cmpint ((int) got.compressed_size, CompareOperator.EQ, (int) e.get_int_member ("compressed_size"));
+        assert_cmpint ((int) got.method, CompareOperator.EQ, (int) e.get_int_member ("method"));
+    }
+}
+
+void test_textile_table () {
+    foreach (var c in objs (spec.get_object_member ("textile_table").get_array_member ("cases"))) {
+        var got = Textile.table_rows (c.get_string_member ("src"));
+        var want = c.get_array_member ("rows");
+        assert_cmpint ((int) got.length, CompareOperator.EQ, (int) want.get_length ());
+        for (int r = 0; r < got.length; r++) {
+            var wr = objs (want.get_array_element (r));
+            assert_cmpint (got[r].length, CompareOperator.EQ, wr.length);
+            for (int k = 0; k < wr.length; k++) {
+                assert_cmpstr (got[r][k].text, CompareOperator.EQ, wr[k].get_string_member ("text"));
+                assert (got[r][k].header == wr[k].get_boolean_member ("h"));
+            }
+        }
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -178,7 +250,8 @@ int main (string[] args) {
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
-    string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns" };
+    string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
+        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -192,5 +265,11 @@ int main (string[] args) {
     Test.add_func ("/spec/thumbnail_source", test_thumbnail_source);
     Test.add_func ("/spec/embedded_thumbnail", test_embedded_thumbnail);
     Test.add_func ("/spec/table_columns", test_table_columns);
+    Test.add_func ("/spec/mention_query", test_mention_query);
+    Test.add_func ("/spec/mention_candidates", test_mention_candidates);
+    Test.add_func ("/spec/recent_opened", test_recent_opened);
+    Test.add_func ("/spec/board_filter", test_board_filter);
+    Test.add_func ("/spec/zip_tail", test_zip_tail);
+    Test.add_func ("/spec/textile_table", test_textile_table);
     return Test.run ();
 }
