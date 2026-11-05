@@ -88,6 +88,8 @@ namespace Redmine {
 
         [GtkCallback]
         private void on_section_activated () {
+            // раздел меняется под стеком колонки: открытый поверх проект закрывал бы выбранный раздел
+            list_nav.pop_to_tag ("sections");
             if (outer.collapsed) outer.show_sidebar = false;
         }
 

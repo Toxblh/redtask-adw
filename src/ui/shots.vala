@@ -8,6 +8,7 @@ namespace Redmine {
      * REDTASK_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDTASK_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
+     * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
         private Gtk.Widget? text_shot = null;
@@ -47,6 +48,13 @@ namespace Redmine {
                 if (sl != null) w.open_link (sl);
                 var issue = Environment.get_variable ("REDTASK_SHOT_ISSUE");
                 if (issue != null) w.open_issue (int.parse (issue));
+                return Source.REMOVE;
+            });
+            // REDTASK_SHOT_SWITCH=N — как щелчок по N-му разделу боковой панели (0 — «Мои»)
+            var sw = Environment.get_variable ("REDTASK_SHOT_SWITCH");
+            if (sw != null) Timeout.add (delay * 3 / 4, () => {
+                var sb = find_sidebar (w);
+                if (sb != null) { sb.selected = int.parse (sw); sb.activated (int.parse (sw)); }
                 return Source.REMOVE;
             });
             // REDTASK_SHOT_PERSON=id — карточка человека
@@ -122,6 +130,15 @@ namespace Redmine {
         private void collect (Gtk.Widget w, GenericArray<Gtk.TextView> res) {
             if (w is FlowView) { res.add ((Gtk.TextView) w); return; }
             for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) collect (c, res);
+        }
+
+        private Adw.Sidebar? find_sidebar (Gtk.Widget w) {
+            if (w is Adw.Sidebar) return (Adw.Sidebar) w;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_sidebar (c);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         private Gtk.Widget? find_clamp (Gtk.Widget w) {
