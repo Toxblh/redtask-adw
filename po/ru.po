@@ -634,8 +634,8 @@ msgstr "Записей нет"
 msgid "Recent"
 msgstr "Недавние"
 
-msgid "Call"
-msgstr "Позвонить"
+msgid "No app to make calls"
+msgstr "Нет приложения для звонков"
 
 msgid "More"
 msgstr "Ещё"

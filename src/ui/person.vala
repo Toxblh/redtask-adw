@@ -145,22 +145,29 @@ namespace Redmine {
             return { work, contacts, acc, about, links };
         }
 
-        /** Телефон: телефонии в GNOME нет — нажатие копирует номер, «Позвонить» (tel:) — в меню строки. */
+        /** Телефон (spec 11): нажатие звонит (tel: — GNOME Calls и т. п.), «Копировать» — в меню строки; звонить нечем — тост с копированием. */
         private void phone_row (Adw.PreferencesGroup g, string text, string tel) {
             if (text == "") return;
-            var r = new Adw.ActionRow () { title = _("Phone"), subtitle = text, use_markup = false, activatable = true, tooltip_text = _("Copy") };
+            var r = new Adw.ActionRow () { title = _("Phone"), subtitle = text, use_markup = false, activatable = true, tooltip_text = "tel:" + tel };
             r.add_css_class ("property");
-            r.activated.connect (() => { copy_text (this, text); toasts.add_toast (new Adw.Toast (_("Copied"))); });
+            r.activated.connect (() => {
+                new Gtk.UriLauncher ("tel:" + tel).launch.begin (get_root () as Gtk.Window, null, (o, res) => {
+                    try {
+                        ((Gtk.UriLauncher) o).launch.end (res);
+                    } catch (Error e) {
+                        if (e is Gtk.DialogError.DISMISSED) return;
+                        var t = new Adw.Toast (_("No app to make calls")) { button_label = _("Copy") };
+                        t.button_clicked.connect (() => { copy_text (this, text); toasts.add_toast (new Adw.Toast (_("Copied"))); });
+                        toasts.add_toast (t);
+                    }
+                });
+            });
             var m = new Menu ();
             m.append (_("Copy"), "phone.copy");
-            m.append (_("Call"), "phone.call");
             var ag = new SimpleActionGroup ();
             var copy = new SimpleAction ("copy", null);
             copy.activate.connect (() => { copy_text (this, text); toasts.add_toast (new Adw.Toast (_("Copied"))); });
             ag.add_action (copy);
-            var call = new SimpleAction ("call", null);
-            call.activate.connect (() => new Gtk.UriLauncher ("tel:" + tel).launch.begin (get_root () as Gtk.Window, null));
-            ag.add_action (call);
             r.insert_action_group ("phone", ag);
             var mb = new Gtk.MenuButton () { icon_name = "view-more-symbolic", menu_model = m, valign = Gtk.Align.CENTER, tooltip_text = _("More") };
             mb.add_css_class ("flat");
