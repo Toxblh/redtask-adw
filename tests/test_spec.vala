@@ -75,9 +75,10 @@ GenericArray<Issue> issues_of (Json.Array a) {
         o.set_int_member ("id", c.get_int_member ("id"));
         if (c.has_member ("subject")) o.set_string_member ("subject", c.get_string_member ("subject"));
         if (c.has_member ("assignee") && !c.get_member ("assignee").is_null ()) o.set_object_member ("assigned_to", c.get_object_member ("assignee"));
-        if (c.has_member ("status")) {
+        if (c.has_member ("status") || c.has_member ("closed")) {
             var st = new Json.Object ();
-            st.set_int_member ("id", c.get_int_member ("status"));
+            if (c.has_member ("status")) st.set_int_member ("id", c.get_int_member ("status"));
+            if (c.has_member ("closed")) st.set_boolean_member ("is_closed", c.get_boolean_member ("closed"));
             o.set_object_member ("status", st);
         }
         res.add (new Issue (o));
@@ -248,6 +249,21 @@ void test_custom_tables () {
     }
 }
 
+void test_assignee_avatars () {
+    var v = spec.get_object_member ("assignee_avatars");
+    var me = (int) v.get_int_member ("me");
+    var issues = issues_of (v.get_array_member ("issues"));
+    foreach (var c in objs (v.get_array_member ("cases"))) {
+        var got = assignee_avatars (issues, me, c.get_string_member ("status"));
+        var want = objs (c.get_array_member ("options"));
+        assert_cmpint (got.length, CompareOperator.EQ, want.length);
+        for (int k = 0; k < want.length; k++) {
+            assert_cmpstr (got[k].key, CompareOperator.EQ, want[k].get_string_member ("key"));
+            assert_cmpint (got[k].count, CompareOperator.EQ, (int) want[k].get_int_member ("count"));
+        }
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -261,7 +277,7 @@ int main (string[] args) {
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
     string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
-        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables" };
+        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -282,5 +298,6 @@ int main (string[] args) {
     Test.add_func ("/spec/zip_tail", test_zip_tail);
     Test.add_func ("/spec/textile_table", test_textile_table);
     Test.add_func ("/spec/custom_tables", test_custom_tables);
+    Test.add_func ("/spec/assignee_avatars", test_assignee_avatars);
     return Test.run ();
 }

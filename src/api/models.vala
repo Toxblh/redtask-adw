@@ -403,6 +403,30 @@ namespace Redmine {
         return res;
     }
 
+    /**
+     * Аватары исполнителей доски (spec 3.2, набор assignee_avatars): все исполнители загруженных задач, count — сколько их
+     * задач на доске при фильтре статуса status (open | closed | all, выбранные аватары и поиск не в счёт); по count
+     * по убыванию, при равенстве — по имени без регистра; «без исполнителя» — последним.
+     */
+    public GenericArray<AssigneeOption> assignee_avatars (GenericArray<Issue> issues, int me, string status) {
+        var by_key = new HashTable<string, AssigneeOption> (str_hash, str_equal);
+        var res = new GenericArray<AssigneeOption> ();
+        AssigneeOption? none = null;
+        foreach (var i in issues) {
+            var k = assignee_key (i, me);
+            var o = k == "none" ? none : by_key[k];
+            if (o == null) {
+                var a = i.assigned_to;
+                o = new AssigneeOption (k, a != null ? a.name : "", 0);
+                if (k == "none") none = o; else { by_key[k] = o; res.add (o); }
+            }
+            if (status == "all" || (status == "closed") == i.status_closed) o.count++;
+        }
+        res.sort ((a, b) => a.count != b.count ? b.count - a.count : strcmp (a.name.casefold (), b.name.casefold ()));
+        if (none != null) res.add (none);
+        return res;
+    }
+
     public GenericArray<Issue> filter_by_assignee (GenericArray<Issue> issues, string key, int me) {
         var res = new GenericArray<Issue> ();
         foreach (var i in issues) if (key == "all" || assignee_key (i, me) == key) res.add (i);

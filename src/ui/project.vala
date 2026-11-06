@@ -430,10 +430,12 @@ namespace Redmine {
             status_filter.add (new Adw.Toggle () { name = "closed", label = _("Closed") });
             status_filter.add (new Adw.Toggle () { name = "*", label = _("All") });
             status_filter.active_name = "open";
-            status_filter.notify["active-name"].connect (apply);
+            status_filter.notify["active-name"].connect (() => { if (all.length > 0) fill_assignees (); apply (); });
             search = new Gtk.SearchEntry () { placeholder_text = _("Search the board"), width_chars = 18 };
             search.search_changed.connect (apply);
-            avatars = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 2) { valign = Gtk.Align.CENTER };
+            // аватары внахлёст, как в Jira: каждый следующий заходит на предыдущий на треть (margin_start -10 у 32 px)
+            avatars = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) { valign = Gtk.Align.CENTER, margin_start = 4 };
+            avatars.add_css_class ("avatar-stack");
             var filters = new Adw.WrapBox () { child_spacing = 6, line_spacing = 6, margin_top = 12 };
             filters.append (status_filter);
             filters.append (search);
@@ -513,15 +515,16 @@ namespace Redmine {
 
         /**
          * Исполнители рядом аватаров (как в Jira, варианты assignee_filter без «все»): нажатие включает и выключает,
-         * выбранных несколько — объединение; не поместились — «+N» со списком с галочками. Выбор переживает обновление.
+         * выбранных несколько — объединение; не поместились — «+N» со списком с галочками и аватарами. Выбор переживает обновление.
          */
         private void fill_assignees () {
             clear_box (avatars);
             var me = App.get ().session.user_id;
             string my_name = "";
             foreach (var i in all) if (i.assigned_to != null && i.assigned_to.id == me) my_name = i.assigned_to.name;
-            var opts = new GenericArray<AssigneeOption> ();
-            foreach (var o in assignee_options (all, me)) if (o.key != "all") opts.add (o);
+            // порядок и числа — по задачам на доске при текущем фильтре статуса (набор assignee_avatars)
+            var st = status_filter.active_name;
+            var opts = assignee_avatars (all, me, st == "*" ? "all" : st);
             var known = new GenericSet<string> (str_hash, str_equal);
             foreach (var o in opts) known.add (o.key);
             foreach (var k in picked.get_values ()) if (!known.contains (k)) picked.remove (k);
@@ -532,36 +535,51 @@ namespace Redmine {
                 var tip = "%s · %d".printf (label, o.count);
                 var key = o.key;
                 if (n < MAX_AVATARS || opts.length == MAX_AVATARS + 1) {
-                    Adw.Avatar av;
-                    if (key == "none") {
-                        av = new Adw.Avatar (32, null, false);
-                        av.add_css_class ("avatar-none");
-                    } else av = Avatars.make (key == "me" ? me : int.parse (key.substring (5)), label, 32);
+                    var av = assignee_avatar (key, me, label, 32);
                     var t = new Gtk.ToggleButton () { child = av, tooltip_text = tip, active = picked.contains (key) };
                     t.add_css_class ("flat");
                     t.add_css_class ("circular");
                     t.add_css_class ("avatar-toggle");
+                    if (n > 0) t.margin_start = -10;
                     t.update_property (Gtk.AccessibleProperty.LABEL, tip, -1);
                     t.toggled.connect (() => pick (key, t.active));
                     avatars.append (t);
                     continue;
                 }
                 if (more == null) more = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
-                var c = new Gtk.CheckButton.with_label (tip) { active = picked.contains (key) };
+                var row = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
+                row.append (assignee_avatar (key, me, label, 24));
+                row.append (new Gtk.Label (tip) { xalign = 0 });
+                var c = new Gtk.CheckButton () { child = row, active = picked.contains (key) };
+                c.update_property (Gtk.AccessibleProperty.LABEL, tip, -1);
                 c.toggled.connect (() => pick (key, c.active));
                 more.append (c);
             }
             if (more != null) {
                 var extra = opts.length - MAX_AVATARS;
-                var mb = new Gtk.MenuButton () { label = "+%d".printf (extra), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more } };
-                mb.add_css_class ("flat");
-                mb.add_css_class ("circular");
+                // «+N» — такой же кружок внахлёст; подпись своим ярлыком: у label MenuButton рисует стрелку
+                var mb = new Gtk.MenuButton () { child = new Gtk.Label ("+%d".printf (extra)), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more }, margin_start = -10 };
+                mb.add_css_class ("avatar-more");
                 avatars.append (mb);
             }
+            mark_picking ();
+        }
+
+        /** Что-то выбрано — остальные аватары приглушены. */
+        private void mark_picking () {
+            if (picked.length > 0) avatars.add_css_class ("picking"); else avatars.remove_css_class ("picking");
+        }
+
+        private static Adw.Avatar assignee_avatar (string key, int me, string label, int size) {
+            if (key != "none") return Avatars.make (key == "me" ? me : int.parse (key.substring (5)), label, size);
+            var av = new Adw.Avatar (size, null, false);
+            av.add_css_class ("avatar-none");
+            return av;
         }
 
         private void pick (string key, bool on) {
             if (on) picked.add (key); else picked.remove (key);
+            mark_picking ();
             apply ();
         }
 

@@ -10,6 +10,7 @@ namespace Redmine {
      * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
      * REDTASK_SHOT_SCROLL=px — прокрутка открытой задачи.
      * REDTASK_SHOT_TYPE=текст — набрать в редакторе открытого диалога.
+     * REDTASK_SHOT_MORE=1 — выбрать второй аватар исполнителя доски и открыть «+N».
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
@@ -98,6 +99,17 @@ namespace Redmine {
                 if (tv != null) { tv.grab_focus (); tv.buffer.insert_at_cursor (type, -1); }
                 return Source.REMOVE;
             });
+            // REDTASK_SHOT_MORE=1 — открыть «+N» исполнителей на экране вехи (список в .popover.png)
+            if (Environment.get_variable ("REDTASK_SHOT_MORE") != null) Timeout.add (delay * 85 / 100, () => {
+                var mb = find_more (w);
+                // без ввода пользователя композитор не даёт захват — список без autohide
+                debug ("shot: more %s", (mb != null).to_string ());
+                // и выбрать второй аватар — видно кольцо выбора и приглушение остальных
+                var second = mb?.get_parent ()?.get_first_child ()?.get_next_sibling () as Gtk.ToggleButton;
+                if (second != null) second.active = true;
+                if (mb != null) { mb.popover.autohide = false; mb.popover.popup (); }
+                return Source.REMOVE;
+            });
             int ticks = 0;
             w.add_tick_callback ((wd, clock) => { ticks++; return Source.CONTINUE; });
             Timeout.add (delay - 1000, () => { ticks = 0; return Source.REMOVE; });
@@ -112,6 +124,8 @@ namespace Redmine {
                 var page = w.visible_issue ();
                 var clamp = Environment.get_variable ("REDTASK_SHOT_FULL") == null ? null : text_shot ?? (page != null ? find_clamp (page) : null);
                 if (clamp != null) save (clamp, Environment.get_variable ("REDTASK_SHOT") + ".full.png");
+                var wp = w.visible_dialog == null ? find_popover (w) : null;
+                if (wp != null) save (wp, Environment.get_variable ("REDTASK_SHOT") + ".popover.png");
                 var d = w.visible_dialog;
                 if (d != null) {
                     debug ("shot: dialog %s %dx%d mapped=%s", d.get_type ().name (), d.get_width (), d.get_height (), d.get_mapped ().to_string ());
@@ -162,6 +176,16 @@ namespace Redmine {
             if (w is Gtk.TextView && ((Gtk.TextView) w).editable) return (Gtk.TextView) w;
             for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
                 var r = find_textview (c);
+                if (r != null) return r;
+            }
+            return null;
+        }
+
+        private Gtk.MenuButton? find_more (Gtk.Widget w) {
+            var mb = w as Gtk.MenuButton;
+            if (mb != null && mb.get_mapped () && mb.has_css_class ("avatar-more")) return mb;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_more (c);
                 if (r != null) return r;
             }
             return null;
