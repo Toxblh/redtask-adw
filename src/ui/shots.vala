@@ -9,6 +9,7 @@ namespace Redmine {
      * REDTASK_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
      * REDTASK_SHOT_SCROLL=px — прокрутка открытой задачи.
+     * REDTASK_SHOT_TYPE=текст — набрать в редакторе открытого диалога.
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
@@ -90,6 +91,13 @@ namespace Redmine {
                 else w.activate_action (action, null);
                 return Source.REMOVE;
             });
+            // REDTASK_SHOT_TYPE=текст — набрать в редакторе открытого диалога (подсказка @)
+            var type = Environment.get_variable ("REDTASK_SHOT_TYPE");
+            if (type != null) Timeout.add (delay * 85 / 100, () => {
+                var tv = find_textview (w.visible_dialog);
+                if (tv != null) { tv.grab_focus (); tv.buffer.insert_at_cursor (type, -1); }
+                return Source.REMOVE;
+            });
             int ticks = 0;
             w.add_tick_callback ((wd, clock) => { ticks++; return Source.CONTINUE; });
             Timeout.add (delay - 1000, () => { ticks = 0; return Source.REMOVE; });
@@ -108,6 +116,9 @@ namespace Redmine {
                 if (d != null) {
                     debug ("shot: dialog %s %dx%d mapped=%s", d.get_type ().name (), d.get_width (), d.get_height (), d.get_mapped ().to_string ());
                     save (d, Environment.get_variable ("REDTASK_SHOT") + ".dialog.png");
+                    // всплывающий список (подсказка @) — своя поверхность, в снимок окна не попадает
+                    var pop = find_popover (d);
+                    if (pop != null) save (pop, Environment.get_variable ("REDTASK_SHOT") + ".popover.png");
                 }
                 // REDTASK_SHOT_WIDE=N — кто требует ширину больше N: виновник окна, вылезающего за экран телефона
                 var wide = Environment.get_variable ("REDTASK_SHOT_WIDE");
@@ -144,6 +155,25 @@ namespace Redmine {
         private void collect (Gtk.Widget w, GenericArray<Gtk.TextView> res) {
             if (w is FlowView) { res.add ((Gtk.TextView) w); return; }
             for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) collect (c, res);
+        }
+
+        private Gtk.TextView? find_textview (Gtk.Widget? w) {
+            if (w == null) return null;
+            if (w is Gtk.TextView && ((Gtk.TextView) w).editable) return (Gtk.TextView) w;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_textview (c);
+                if (r != null) return r;
+            }
+            return null;
+        }
+
+        private Gtk.Popover? find_popover (Gtk.Widget w) {
+            if (w is Gtk.Popover && w.get_mapped ()) return (Gtk.Popover) w;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_popover (c);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         private Adw.Sidebar? find_sidebar (Gtk.Widget w) {

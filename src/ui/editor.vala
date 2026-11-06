@@ -8,6 +8,15 @@ namespace Redmine {
         private Gtk.Box preview_box;
         public GenericArray<Json.Object> attachments = new GenericArray<Json.Object> ();
         public signal void submit ();
+        /** Подсказка @упоминания у каретки (spec 8.1). */
+        private MentionSource mentions = new MentionSource ();
+        private Gtk.Popover pop;
+        private Gtk.ListBox pop_list;
+        private GenericArray<Json.Object> pop_items = new GenericArray<Json.Object> ();
+        private string? mq = null;
+
+        /** Люди задачи — первыми в подсказке @ и в «Упомянуть». */
+        public void set_issue (Issue i) { mentions.set_issue (i); }
 
         public string text {
             owned get { return view.buffer.text; }
@@ -73,6 +82,99 @@ namespace Redmine {
             var keys = new Gtk.EventControllerKey ();
             keys.key_pressed.connect (on_key);
             view.add_controller (keys);
+
+            // список не забирает фокус и ввод: печатаем дальше, пока он открыт (autohide выключен)
+            pop_list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.BROWSE, can_focus = false };
+            pop_list.row_activated.connect ((r) => accept (r.get_index ()));
+            pop = new Gtk.Popover () {
+                autohide = false, has_arrow = false, position = Gtk.PositionType.BOTTOM,
+                child = new Gtk.ScrolledWindow () {
+                    child = pop_list, hscrollbar_policy = Gtk.PolicyType.NEVER, propagate_natural_height = true,
+                    max_content_height = 300, width_request = 320,
+                },
+            };
+            pop.set_parent (view);
+            view.buffer.notify["cursor-position"].connect (on_cursor);
+            view.buffer.changed.connect (on_cursor);
+            mentions.results.connect (show_candidates);
+        }
+
+        public override void dispose () {
+            if (pop != null) { pop.unparent (); pop = null; }
+            base.dispose ();
+        }
+
+        /** Каретка сдвинулась или текст изменился: запрос @ до неё (набор mention_query). */
+        private void on_cursor () {
+            if (pop == null) return;
+            var buf = view.buffer;
+            var q = mention_query (buf.text, buf.cursor_position);
+            if (q == mq) return;
+            mq = q;
+            if (q == null) pop.popdown ();
+            mentions.query (q);
+        }
+
+        private void show_candidates (GenericArray<Json.Object> people) {
+            if (mq == null || pop == null) return;
+            pop_list.remove_all ();
+            pop_items = people;
+            if (people.length == 0) { pop.popdown (); return; }
+            foreach (var p in people) pop_list.append (person_row (p));
+            pop_list.select_row (pop_list.get_row_at_index (0));
+            Gtk.TextIter it;
+            view.buffer.get_iter_at_mark (out it, view.buffer.get_insert ());
+            Gdk.Rectangle r;
+            view.get_iter_location (it, out r);
+            int x, y;
+            view.buffer_to_window_coords (Gtk.TextWindowType.WIDGET, r.x, r.y, out x, out y);
+            pop.pointing_to = { x, y, 1, r.height };
+            pop.popup ();
+        }
+
+        /** Выбор: «@запрос» перед кареткой → «@login ». Логина человека задачи ещё нет — дождаться. */
+        private void accept (int index) {
+            if (mq == null || index < 0 || index >= pop_items.length) return;
+            var p = pop_items[index];
+            var typed = mq.char_count () + 1;
+            pop.popdown ();
+            mentions.login_of.begin (p, (o, r) => {
+                var login = mentions.login_of.end (r);
+                if (login == "") return;
+                var buf = view.buffer;
+                Gtk.TextIter end, start;
+                buf.get_iter_at_mark (out end, buf.get_insert ());
+                start = end;
+                start.backward_chars (typed);
+                buf.begin_user_action ();
+                buf.delete (ref start, ref end);
+                buf.insert (ref start, "@" + login + " ", -1);
+                buf.end_user_action ();
+            });
+        }
+
+        /** Стрелки и Enter выбирают, Esc прячет — только пока список открыт. */
+        private bool popup_key (uint keyval) {
+            if (pop == null || !pop.visible) return false;
+            var row = pop_list.get_selected_row ();
+            int i = row != null ? row.get_index () : 0;
+            int n = (int) pop_items.length;
+            switch (keyval) {
+                case Gdk.Key.Escape:
+                    pop.popdown ();
+                    mentions.query (null); // поздний ответ сервера список не вернёт; новый «@» — вернёт
+                    return true;
+                case Gdk.Key.Up: case Gdk.Key.KP_Up:
+                    pop_list.select_row (pop_list.get_row_at_index ((i - 1 + n) % n));
+                    return true;
+                case Gdk.Key.Down: case Gdk.Key.KP_Down:
+                    pop_list.select_row (pop_list.get_row_at_index ((i + 1) % n));
+                    return true;
+                case Gdk.Key.Return: case Gdk.Key.KP_Enter: case Gdk.Key.Tab:
+                    accept (i);
+                    return true;
+            }
+            return false;
         }
 
         public void focus_text () {
@@ -91,6 +193,7 @@ namespace Redmine {
         }
 
         private bool on_key (uint keyval, uint code, Gdk.ModifierType state) {
+            if (popup_key (keyval)) return true;
             var ctrl = (state & Gdk.ModifierType.CONTROL_MASK) != 0;
             if (ctrl && (keyval == Gdk.Key.Return || keyval == Gdk.Key.KP_Enter)) { submit (); return true; }
             if (ctrl && keyval == Gdk.Key.b) { wrap ("*", "*"); return true; }
@@ -208,7 +311,7 @@ namespace Redmine {
         }
 
         private void pick_person () {
-            var d = new PersonPickerDialog ();
+            var d = new PersonPickerDialog (mentions);
             d.picked.connect ((login) => insert ("@" + login + " "));
             d.present (this);
         }
@@ -291,21 +394,153 @@ namespace Redmine {
         }
     }
 
-    /** Выбор человека для @упоминания: поиск по началу фамилии/имени/логина (плагин People). */
+    /** Строка человека: аватар, имя, @login. */
+    Gtk.ListBoxRow person_row (Json.Object p) {
+        var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8) { margin_top = 4, margin_bottom = 4, margin_start = 4, margin_end = 4 };
+        b.append (Avatars.make (jint (p, "id"), jstr (p, "name"), 28));
+        var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { valign = Gtk.Align.CENTER };
+        col.append (new Gtk.Label (jstr (p, "name")) { xalign = 0, ellipsize = Pango.EllipsizeMode.END });
+        if (jstr (p, "login") != "") {
+            var l = new Gtk.Label ("@" + jstr (p, "login")) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
+            l.add_css_class ("dim-label");
+            l.add_css_class ("caption");
+            col.append (l);
+        }
+        b.append (col);
+        return new Gtk.ListBoxRow () { child = b, can_focus = false };
+    }
+
+    /**
+     * Кандидаты @упоминания (spec 8): люди задачи (исполнитель, автор, авторы комментариев от свежих, наблюдатели),
+     * затем все встреченные сотрудники. Отбор локальный на каждый символ (набор mention_candidates), people.json?search=
+     * — через 150 мс после последнего символа, его ответ дополняет тот же список; ответ на устаревший запрос не показывается.
+     */
+    public class MentionSource : Object {
+        /** Все встреченные сотрудники {id, name, login} — на процесс. */
+        private static GenericArray<Json.Object>? known = null;
+        private GenericArray<Json.Object> participants = new GenericArray<Json.Object> ();
+        private string? current = null;
+        private uint timer = 0;
+        private int gen = 0;
+        public signal void results (GenericArray<Json.Object> people);
+
+        construct { if (known == null) known = new GenericArray<Json.Object> (); }
+
+        public MentionSource.like (MentionSource other) { participants = other.participants; }
+
+        private static Json.Object person (int id, string name, string login) {
+            var o = new Json.Object ();
+            o.set_int_member ("id", id);
+            o.set_string_member ("name", name);
+            o.set_string_member ("login", login);
+            return o;
+        }
+
+        /** Сотрудник в общий кэш; известный — дополнить логином. */
+        private static void learn (int id, string name, string login) {
+            foreach (var k in known) if (jint (k, "id") == id) {
+                if (jstr (k, "login") == "" && login != "") k.set_string_member ("login", login);
+                return;
+            }
+            known.add (person (id, name, login));
+        }
+
+        public void set_issue (Issue i) {
+            var res = new GenericArray<Json.Object> ();
+            var seen = new GenericSet<int> (direct_hash, direct_equal);
+            Named?[] head = { i.assigned_to, i.author };
+            foreach (var n in head) if (n != null && n.id > 0 && !seen.contains (n.id)) { seen.add (n.id); res.add (person (n.id, n.name, "")); }
+            var js = i.journals;
+            for (int k = js.length - 1; k >= 0; k--) {
+                var u = jobj (js[k], "user");
+                var id = jint (u, "id");
+                if (id > 0 && !seen.contains (id)) { seen.add (id); res.add (person (id, jstr (u, "name"), "")); }
+            }
+            foreach (var w in i.watchers) {
+                var id = jint (w, "id");
+                if (id > 0 && !seen.contains (id)) { seen.add (id); res.add (person (id, jstr (w, "name"), "")); }
+            }
+            participants = res;
+            foreach (var p in res) login_of.begin (p);
+        }
+
+        /** Логин человека: из кэша сотрудников, иначе people/:id или users/:id (справочники кэшируют на сутки). */
+        public async string login_of (Json.Object p) {
+            var login = jstr (p, "login");
+            if (login != "") return login;
+            var id = jint (p, "id");
+            foreach (var k in known) if (jint (k, "id") == id && jstr (k, "login") != "") login = jstr (k, "login");
+            var s = App.get ().session;
+            if (login == "" && s != null) {
+                try { login = jstr (yield s.refs.person (id), "login"); } catch (Error e) {}
+                if (login == "") try { login = jstr (yield s.refs.user (id), "login"); } catch (Error e) {}
+            }
+            if (login == "") return "";
+            p.set_string_member ("login", login);
+            learn (id, jstr (p, "name"), login);
+            if (current != null) results (local (current));
+            return login;
+        }
+
+        private GenericArray<Json.Object> local (string q) { return mention_candidates (participants, known, q, 8); }
+
+        /** null — подсказки нет: таймер и поздние ответы гасятся. */
+        public void query (string? q) {
+            current = q;
+            gen++;
+            if (timer != 0) { Source.remove (timer); timer = 0; }
+            if (q == null) return;
+            results (local (q));
+            if (q == "") return;
+            var my = gen;
+            timer = Timeout.add (150, () => { timer = 0; fetch.begin (q, my); return Source.REMOVE; });
+        }
+
+        private async void fetch (string q, int my) {
+            var s = App.get ().session;
+            if (s == null) return;
+            try {
+                foreach (var p in yield s.api.search_people (q, 20)) {
+                    var first = jstr (p, "firstname") != "" ? jstr (p, "firstname") : jstr (p, "first_name");
+                    var last = jstr (p, "lastname") != "" ? jstr (p, "lastname") : jstr (p, "last_name");
+                    // имя как пишет сервер в задачах: «Фамилия Имя»
+                    learn (jint (p, "id"), (last + " " + first).strip (), jstr (p, "login"));
+                }
+            } catch (Error e) {
+                debug ("people: %s", e.message);
+                return;
+            }
+            if (my == gen) results (local (q));
+        }
+    }
+
+    /** «Упомянуть» (spec 8.2): тот же список с полем поиска; пусто — люди задачи. */
     public class PersonPickerDialog : Adw.Dialog {
         public signal void picked (string login);
         private Gtk.ListBox list;
-        private int gen = 0;
+        private GenericArray<Json.Object> items = new GenericArray<Json.Object> ();
+        private MentionSource src;
 
-        public PersonPickerDialog () {
+        public PersonPickerDialog (MentionSource from) {
             title = _("Mention a Person");
             content_width = 420;
             content_height = 480;
+            src = new MentionSource.like (from);
             var entry = new Gtk.SearchEntry () { placeholder_text = _("Name or login"), margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
             list = new Gtk.ListBox ();
             list.add_css_class ("navigation-sidebar");
-            list.row_activated.connect ((row) => { picked ((string) row.get_data<string> ("login")); close (); });
-            entry.search_changed.connect (() => search.begin (entry.text));
+            list.row_activated.connect ((row) => pick (row.get_index ()));
+            entry.search_changed.connect (() => src.query (entry.text.strip ()));
+            entry.activate.connect (() => pick (0));
+            src.results.connect ((people) => {
+                items = people;
+                list.remove_all ();
+                foreach (var p in people) {
+                    var r = person_row (p);
+                    r.can_focus = true;
+                    list.append (r);
+                }
+            });
             var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             box.append (entry);
             box.append (new Gtk.ScrolledWindow () { child = list, vexpand = true });
@@ -314,38 +549,17 @@ namespace Redmine {
             tv.content = box;
             child = tv;
             focus_widget = entry;
+            src.query ("");
         }
 
-        private async void search (string q) {
-            var s = App.get ().session;
-            var my = ++gen;
-            if (s == null || q.strip ().length < 2) return;
-            yield sleep_ms (300);
-            if (my != gen) return;
-            try {
-                var people = yield s.api.search_people (q.strip (), 20);
-                if (my != gen) return;
-                list.remove_all ();
-                foreach (var p in people) {
-                    var login = jstr (p, "login");
-                    if (login == "") continue;
-                    var row = new Gtk.ListBoxRow ();
-                    var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8) { margin_top = 4, margin_bottom = 4, margin_start = 4 };
-                    b.append (Avatars.make (jint (p, "id"), person_short_name (p), 32));
-                    var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-                    col.append (new Gtk.Label (person_short_name (p)) { xalign = 0 });
-                    var l = new Gtk.Label ("@" + login) { xalign = 0 };
-                    l.add_css_class ("dim-label");
-                    l.add_css_class ("caption");
-                    col.append (l);
-                    b.append (col);
-                    row.child = b;
-                    row.set_data<string> ("login", login);
-                    list.append (row);
-                }
-            } catch (Error e) {
-                debug ("people: %s", e.message);
-            }
+        private void pick (int i) {
+            if (i < 0 || i >= items.length) return;
+            src.login_of.begin (items[i], (o, r) => {
+                var login = src.login_of.end (r);
+                if (login == "") return;
+                picked (login);
+                close ();
+            });
         }
     }
 }

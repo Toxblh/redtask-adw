@@ -105,6 +105,7 @@ namespace Redmine {
             if (drafts == null) drafts = new HashTable<int, string> (direct_hash, direct_equal);
             editor = new TextileEditor (220);
             editor.attachments = issue.attachments;
+            editor.set_issue (issue);
             editor.submit.connect (() => { if (!busy) submit.begin (); });
             content_box.append (editor);
 
@@ -487,6 +488,7 @@ namespace Redmine {
 
             var dg = new Adw.PreferencesGroup () { title = _("Description") };
             description = new TextileEditor (180);
+            if (issue != null) description.set_issue (issue);
             dg.add (description);
             content_box.append (dg);
 
