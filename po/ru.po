@@ -631,6 +631,18 @@ msgstr "Закрыта"
 msgid "No entries"
 msgstr "Записей нет"
 
+msgid "As Board"
+msgstr "Доской"
+
+msgid "Subtasks as a board"
+msgstr "Подзадачи доской"
+
+msgid "Search the board"
+msgstr "Поиск по доске"
+
+msgid "More assignees"
+msgstr "Ещё исполнители"
+
 msgid "No description"
 msgstr "Без описания"
 

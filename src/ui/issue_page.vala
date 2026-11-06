@@ -699,7 +699,7 @@ namespace Redmine {
             b.tooltip_text = b.active ? _("Newest First") : _("Oldest First");
         }
 
-        private void section_header (string text, string? action_label, string? action) {
+        private Gtk.Box section_header (string text, string? action_label, string? action) {
             var row = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_top = 18, margin_bottom = 6 };
             var l = new Gtk.Label (text) { xalign = 0, hexpand = true };
             l.add_css_class ("heading");
@@ -710,6 +710,7 @@ namespace Redmine {
                 row.append (b);
             }
             body.append (row);
+            return row;
         }
 
         /** Пилюля статуса справа в строке подзадачи/связи: тема переносится, пилюля — нет. */
@@ -722,7 +723,14 @@ namespace Redmine {
         private void render_children () {
             var ch = issue.children;
             if (ch.length == 0) return;
-            section_header (_("Subtasks"), _("Add Subtask"), "issue.add-subtask");
+            var head = section_header (_("Subtasks"), _("Add Subtask"), "issue.add-subtask");
+            // как экран вехи (spec 3.3): список или доска, аватары, поиск
+            var as_board = new Gtk.Button.with_label (_("As Board")) { tooltip_text = _("Subtasks as a board"), valign = Gtk.Align.CENTER };
+            as_board.add_css_class ("flat");
+            var pid = issue.id;
+            var subj = issue.subject;
+            as_board.clicked.connect (() => win ()?.open_content (new VersionPage.subtasks (pid, subj)));
+            head.insert_child_after (as_board, head.get_first_child ());
             var list = boxed ();
             foreach (var c in ch) {
                 var id = jint (c, "id");

@@ -47,6 +47,9 @@ namespace Redmine {
                 var link = Environment.get_variable ("REDTASK_SHOT_LINK");
                 var sl = link != null ? ServerLink.parse (App.get ().session.server, link) : null;
                 if (sl != null) w.open_link (sl);
+                // REDTASK_SHOT_SUBTASKS=номер — подзадачи доской (spec 3.3)
+                var sub = Environment.get_variable ("REDTASK_SHOT_SUBTASKS");
+                if (sub != null) w.open_content (new VersionPage.subtasks (int.parse (sub), ""));
                 var issue = Environment.get_variable ("REDTASK_SHOT_ISSUE");
                 if (issue != null) w.open_issue (int.parse (issue));
                 return Source.REMOVE;

@@ -4,19 +4,26 @@ namespace Redmine {
     /** Задачи вехи загружаются один раз: и для прогресса в списке вех, и для экрана вехи. */
     private HashTable<int, GenericArray<Issue>>? version_issues_cache = null;
 
-    /** Все задачи вехи (любой статус), страницами по 100, не больше 500. */
-    public async GenericArray<Issue> version_issues (int vid, bool fresh = false) throws Error {
-        if (version_issues_cache == null) version_issues_cache = new HashTable<int, GenericArray<Issue>> (direct_hash, direct_equal);
-        if (!fresh && version_issues_cache.contains (vid)) return version_issues_cache[vid];
+    /** Все задачи по запросу (любой статус), страницами по 100, не больше 500. */
+    private async GenericArray<Issue> all_issues (IssueQuery q) throws Error {
         var s = App.get ().session;
         var res = new GenericArray<Issue> ();
-        var q = new IssueQuery () { fixed_version_id = vid, status = "*", limit = 100 };
+        q.status = "*";
+        q.limit = 100;
         while (res.length < 500) {
             var page = yield s.api.issues (q);
             foreach (var i in page.issues) res.add (i);
             q.offset += page.issues.length;
             if (page.issues.length == 0 || q.offset >= page.total) break;
         }
+        return res;
+    }
+
+    /** Все задачи вехи — один раз на прогресс в списке и экран вехи. */
+    public async GenericArray<Issue> version_issues (int vid, bool fresh = false) throws Error {
+        if (version_issues_cache == null) version_issues_cache = new HashTable<int, GenericArray<Issue>> (direct_hash, direct_equal);
+        if (!fresh && version_issues_cache.contains (vid)) return version_issues_cache[vid];
+        var res = yield all_issues (new IssueQuery () { fixed_version_id = vid });
         version_issues_cache[vid] = res;
         return res;
     }
@@ -372,25 +379,43 @@ namespace Redmine {
     }
 
     /** Веха: шапка, фильтры по статусу и исполнителю (локально), вид «Список / Доска». */
+    /**
+     * Экран вехи (spec 3.2) и он же — подзадачи доской (3.3, parent_id > 0): шапка, статус, поиск по доске,
+     * аватары исполнителей (несколько сразу, лишние — «+N»), Список / Доска.
+     */
     public class VersionPage : Adw.NavigationPage, Refreshable {
         private int version_id;
+        private int parent_id = 0;
+        private string parent_subject = "";
         private Json.Object? version;
         private GenericArray<Issue> all = new GenericArray<Issue> ();
         private int[] status_order = {};
         private StateView state;
         private Gtk.Box info;
         private Adw.ToggleGroup status_filter;
-        private Gtk.DropDown assignee;
-        private string[] keys = {};
+        private Gtk.SearchEntry search;
+        private Gtk.Box avatars;
+        private GenericSet<string> picked = new GenericSet<string> (str_hash, str_equal);
+        private const int MAX_AVATARS = 7;
         private Gtk.Stack results;
         private Gtk.ListBox list;
         private Gtk.Box board;
-        private bool filling = false;
-
         public VersionPage (int id, Json.Object? v = null) {
             Object (title: v != null ? jstr (v, "name") : _("Version"), tag: "version-%d".printf (id));
             version_id = id;
             version = v;
+            build ();
+        }
+
+        /** Подзадачи задачи parent доской (spec 3.3). */
+        public VersionPage.subtasks (int parent, string subject) {
+            Object (title: "#%d".printf (parent), tag: "subtasks-%d".printf (parent));
+            parent_id = parent;
+            parent_subject = subject;
+            build ();
+        }
+
+        private void build () {
             var view = new Adw.ToggleGroup ();
             view.add (new Adw.Toggle () { name = "list", icon_name = "view-list-symbolic", tooltip = _("List") });
             view.add (new Adw.Toggle () { name = "board", icon_name = "view-grid-symbolic", tooltip = _("Board") });
@@ -406,11 +431,13 @@ namespace Redmine {
             status_filter.add (new Adw.Toggle () { name = "*", label = _("All") });
             status_filter.active_name = "open";
             status_filter.notify["active-name"].connect (apply);
-            assignee = new Gtk.DropDown (new Gtk.StringList (null), null) { tooltip_text = _("Assignee") };
-            assignee.notify["selected"].connect (() => { if (!filling) apply (); });
+            search = new Gtk.SearchEntry () { placeholder_text = _("Search the board"), width_chars = 18 };
+            search.search_changed.connect (apply);
+            avatars = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 2) { valign = Gtk.Align.CENTER };
             var filters = new Adw.WrapBox () { child_spacing = 6, line_spacing = 6, margin_top = 12 };
             filters.append (status_filter);
-            filters.append (assignee);
+            filters.append (search);
+            filters.append (avatars);
             var top = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 6 };
             top.append (info);
             top.append (filters);
@@ -445,12 +472,14 @@ namespace Redmine {
             var s = App.get ().session;
             if (s == null) return;
             try {
-                if (version == null || fresh) version = jobj (yield s.api.get_obj ("versions/%d.json".printf (version_id)), "version");
-                title = jstr (version, "name");
+                if (parent_id == 0) {
+                    if (version == null || fresh) version = jobj (yield s.api.get_obj ("versions/%d.json".printf (version_id)), "version");
+                    title = jstr (version, "name");
+                }
                 int[] order = {};
                 foreach (var st in yield s.refs.statuses ()) order += jint (st, "id");
                 status_order = order;
-                all = yield version_issues (version_id, fresh);
+                all = parent_id > 0 ? yield all_issues (new IssueQuery () { parent_id = parent_id }) : yield version_issues (version_id, fresh);
                 render_info ();
                 fill_assignees ();
                 apply ();
@@ -462,15 +491,15 @@ namespace Redmine {
 
         private void render_info () {
             clear_box (info);
-            var name = new Gtk.Label (jstr (version, "name")) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
+            var name = new Gtk.Label (parent_id > 0 ? "#%d %s".printf (parent_id, parent_subject) : jstr (version, "name")) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
             name.add_css_class ("title-2");
             info.append (name);
-            var due = jstr (version, "due_date");
-            var proj = Named.from (jobj (version, "project"));
-            var meta = new Gtk.Label ((due != "" ? _("Due %s").printf (format_date (due)) + " · " : "") + (proj != null ? proj.name : "")) { xalign = 0, wrap = true };
+            var due = parent_id > 0 ? "" : jstr (version, "due_date");
+            var proj = parent_id > 0 ? null : Named.from (jobj (version, "project"));
+            var meta = new Gtk.Label (parent_id > 0 ? _("Subtasks") : (due != "" ? _("Due %s").printf (format_date (due)) + " · " : "") + (proj != null ? proj.name : "")) { xalign = 0, wrap = true };
             meta.add_css_class ("dim-label");
             info.append (meta);
-            var d = jstr (version, "description").strip ();
+            var d = parent_id > 0 ? "" : jstr (version, "description").strip ();
             if (d != "") info.append (new Gtk.Label (d) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, selectable = true, lines = 4, ellipsize = Pango.EllipsizeMode.END });
             double f;
             var text = progress_text (all, out f);
@@ -482,31 +511,67 @@ namespace Redmine {
             info.append (prog);
         }
 
-        /** Варианты «Исполнителя» с числами (набор assignee_filter), выбранный сохраняется. */
+        /**
+         * Исполнители рядом аватаров (как в Jira, варианты assignee_filter без «все»): нажатие включает и выключает,
+         * выбранных несколько — объединение; не поместились — «+N» со списком с галочками. Выбор переживает обновление.
+         */
         private void fill_assignees () {
-            var cur = assignee.selected < keys.length ? keys[assignee.selected] : "all";
-            var sl = new Gtk.StringList (null);
-            string[] ks = {};
-            uint sel = 0;
-            foreach (var o in assignee_options (all, App.get ().session.user_id)) {
-                var label = o.key == "all" ? _("All assignees") : (o.key == "me" ? _("Me") : (o.key == "none" ? _("Not assigned") : o.name));
-                if (o.key == cur) sel = ks.length;
-                ks += o.key;
-                sl.append ("%s (%d)".printf (label, o.count));
+            clear_box (avatars);
+            var me = App.get ().session.user_id;
+            string my_name = "";
+            foreach (var i in all) if (i.assigned_to != null && i.assigned_to.id == me) my_name = i.assigned_to.name;
+            var opts = new GenericArray<AssigneeOption> ();
+            foreach (var o in assignee_options (all, me)) if (o.key != "all") opts.add (o);
+            var known = new GenericSet<string> (str_hash, str_equal);
+            foreach (var o in opts) known.add (o.key);
+            foreach (var k in picked.get_values ()) if (!known.contains (k)) picked.remove (k);
+            Gtk.Box? more = null;
+            for (int n = 0; n < opts.length; n++) {
+                var o = opts[n];
+                var label = o.key == "me" ? (my_name != "" ? my_name : _("Me")) : (o.key == "none" ? _("Not assigned") : o.name);
+                var tip = "%s · %d".printf (label, o.count);
+                var key = o.key;
+                if (n < MAX_AVATARS || opts.length == MAX_AVATARS + 1) {
+                    Adw.Avatar av;
+                    if (key == "none") {
+                        av = new Adw.Avatar (32, null, false);
+                        av.add_css_class ("avatar-none");
+                    } else av = Avatars.make (key == "me" ? me : int.parse (key.substring (5)), label, 32);
+                    var t = new Gtk.ToggleButton () { child = av, tooltip_text = tip, active = picked.contains (key) };
+                    t.add_css_class ("flat");
+                    t.add_css_class ("circular");
+                    t.add_css_class ("avatar-toggle");
+                    t.update_property (Gtk.AccessibleProperty.LABEL, tip, -1);
+                    t.toggled.connect (() => pick (key, t.active));
+                    avatars.append (t);
+                    continue;
+                }
+                if (more == null) more = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
+                var c = new Gtk.CheckButton.with_label (tip) { active = picked.contains (key) };
+                c.toggled.connect (() => pick (key, c.active));
+                more.append (c);
             }
-            filling = true;
-            keys = ks;
-            assignee.model = sl;
-            assignee.selected = sel;
-            filling = false;
+            if (more != null) {
+                var extra = opts.length - MAX_AVATARS;
+                var mb = new Gtk.MenuButton () { label = "+%d".printf (extra), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more } };
+                mb.add_css_class ("flat");
+                mb.add_css_class ("circular");
+                avatars.append (mb);
+            }
+        }
+
+        private void pick (string key, bool on) {
+            if (on) picked.add (key); else picked.remove (key);
+            apply ();
         }
 
         private void apply () {
             var st = status_filter.active_name;
             var by_status = new GenericArray<Issue> ();
             foreach (var i in all) if (st == "*" || (st == "closed") == i.status_closed) by_status.add (i);
-            var key = assignee.selected < keys.length ? keys[assignee.selected] : "all";
-            var shown = filter_by_assignee (by_status, key, App.get ().session.user_id);
+            string[] keys = {};
+            foreach (var k in picked.get_values ()) keys += k;
+            var shown = board_filter (by_status, App.get ().session.user_id, keys, search.text);
             list.remove_all ();
             foreach (var i in shown) list.append (new IssueRow (i, false));
             clear_box (board);
