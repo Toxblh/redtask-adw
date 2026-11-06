@@ -429,7 +429,7 @@ namespace Redmine {
         foreach (var st in seen) if (cols.contains (st)) res.add (cols[st]);
         return res;
     }
-    /** Ключи выбранных аватаров (как в assignee_filter, пусто — все) и поиск по доске: номер с начала или начало слова темы (набор board_filter). */
+    /** Ключи выбранных аватаров (как в assignee_filter, пусто — все) и поиск по доске: номер с начала или каждое слово запроса — начало слова темы (набор board_filter). */
     public GenericArray<Issue> board_filter (GenericArray<Issue> issues, int me, string[] assignees, string query) {
         var q = fold (query.strip ());
         var digits = /^#?\d+$/.match (q);
@@ -437,16 +437,22 @@ namespace Redmine {
         var res = new GenericArray<Issue> ();
         foreach (var i in issues) {
             if (assignees.length > 0 && !(assignee_key (i, me) in assignees)) continue;
-            if (q != "" && !(digits ? i.id.to_string ().has_prefix (q) || i.subject.contains (q) : word_prefix (fold (i.subject), q) || (q.contains (" ") && fold (i.subject).contains (q)))) continue;
+            if (q != "" && !((digits && i.id.to_string ().has_prefix (q)) || word_prefix (fold (i.subject), q))) continue;
             res.add (i);
         }
         return res;
     }
 
-    /** Какое-то слово текста начинается с q: «ел» находит «Ёлка», но не «Релиз». */
+    /** Каждое слово запроса — начало какого-то слова текста: «ел» находит «Ёлка», но не «Релиз». */
     private bool word_prefix (string text, string q) {
-        foreach (var w in Regex.split_simple ("[^\\p{L}\\p{N}]+", text)) if (w.has_prefix (q)) return true;
-        return false;
+        var words = Regex.split_simple ("[^\\p{L}\\p{N}]+", text);
+        foreach (var w in Regex.split_simple ("[^\\p{L}\\p{N}]+", q)) {
+            if (w == "") continue;
+            bool hit = false;
+            foreach (var t in words) if (t.has_prefix (w)) { hit = true; break; }
+            if (!hit) return false;
+        }
+        return true;
     }
 
     /** Сравнение людей и тем: без регистра, ё = е. */
