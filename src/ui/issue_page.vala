@@ -179,9 +179,14 @@ namespace Redmine {
                     render ();
                 }
             }
+            fresh_tables = null;
+            load_tables.begin (s, my); // HTML страницы — параллельно, показ задачи не ждёт
             try {
                 var fresh = yield s.api.issue (issue_id);
                 if (my != gen) return;
+                // листы согласования: свежие, если HTML уже пришёл, иначе прежние из кэша
+                if (fresh_tables != null) fresh.o.set_array_member ("_custom_tables", fresh_tables);
+                else if (issue != null && issue.o.has_member ("_custom_tables")) fresh.o.set_member ("_custom_tables", issue.o.get_member ("_custom_tables").copy ());
                 // подписи полей лежат в кэше вместе с задачей — годны, пока задачу не меняли
                 if (issue != null && issue.o.has_member ("_cf_labels") && jstr (issue.o, "updated_on") == jstr (fresh.o, "updated_on"))
                     fresh.o.set_member ("_cf_labels", issue.o.get_member ("_cf_labels").copy ());
@@ -200,6 +205,25 @@ namespace Redmine {
             load_names.begin (s, my);
             load_linked.begin (s, my);
             if (!issue.o.has_member ("_cf_labels")) load_labels.begin (s, my);
+        }
+
+        private Json.Array? fresh_tables = null;
+
+        /** Листы согласования (spec 10) из HTML страницы задачи; не пришло — остаётся кэш. */
+        private async void load_tables (Session s, int my) {
+            Json.Array t;
+            try {
+                t = custom_tables (yield s.api.issue_html (issue_id));
+            } catch (Error e) {
+                debug ("custom tables %d: %s", issue_id, e.message);
+                return;
+            }
+            if (my != gen) return;
+            fresh_tables = t;
+            if (issue == null) return;
+            issue.o.set_array_member ("_custom_tables", t);
+            s.cache.save ("issue-%d".printf (issue_id), obj_node (issue.o));
+            render ();
         }
 
         /** Подписи полей-списков («88» → название) из CSV-экспорта; пустой ответ не запоминаем — мог быть сбоем. */
@@ -620,6 +644,7 @@ namespace Redmine {
                 body.append (heading (jstr (cf, "name")));
                 body.append (card (rich (cf_display (labels, cf).replace ("\r\n", "\n").strip ())));
             }
+            render_custom_tables ();
 
             // описание
             body.append (heading (_("Description")));
@@ -779,6 +804,48 @@ namespace Redmine {
                 list.append (row);
             }
             body.append (list);
+        }
+
+        /** Листы согласования (spec 10): строка — человек аватаром и «Колонка: значение»; «Согласовано» — зелёной пилюлей. */
+        private void render_custom_tables () {
+            var ts = issue.o.has_member ("_custom_tables") ? issue.o.get_array_member ("_custom_tables") : null;
+            if (ts == null) return;
+            foreach (var tn in ts.get_elements ()) {
+                var t = tn.get_object ();
+                var cols = t.get_array_member ("columns");
+                body.append (heading (jstr (t, "title")));
+                var list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.NONE };
+                list.add_css_class ("boxed-list");
+                foreach (var rn in t.get_array_member ("rows").get_elements ()) {
+                    var line = new Adw.WrapBox () { child_spacing = 12, line_spacing = 4, margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 12 };
+                    var cells = rn.get_array ();
+                    for (uint k = 0; k < cells.get_length (); k++) {
+                        var c = cells.get_object_element (k);
+                        var text = jstr (c, "text");
+                        if (text == "") continue;
+                        if (jint (c, "user_id") > 0) {
+                            var who = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+                            who.append (Avatars.make (jint (c, "user_id"), text, 24));
+                            who.append (new Gtk.Label (text));
+                            var b = person_button (jint (c, "user_id"), text, who);
+                            b.remove_css_class ("person-link");
+                            line.append (b);
+                            continue;
+                        }
+                        var col = k < cols.get_length () ? cols.get_string_element (k) : "";
+                        if (text == "Согласовано") { line.append (status_pill (text, true)); continue; }
+                        var l = new Gtk.Label (col != "" ? "%s: %s".printf (col, text) : text) { wrap = true, xalign = 0, valign = Gtk.Align.CENTER, selectable = true };
+                        line.append (l);
+                    }
+                    list.append (new Gtk.ListBoxRow () { child = line, activatable = false });
+                }
+                if (t.get_array_member ("rows").get_length () == 0) {
+                    var l = new Gtk.Label (_("No entries")) { margin_top = 10, margin_bottom = 10 };
+                    l.add_css_class ("dim-label");
+                    list.append (new Gtk.ListBoxRow () { child = l, activatable = false });
+                }
+                body.append (list);
+            }
         }
 
         private void render_watchers () {

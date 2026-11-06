@@ -729,7 +729,7 @@ namespace Redmine {
             }
             status = msg.status_code;
             var ct = msg.response_headers.get_content_type (null);
-            bool waf = waf_challenge ("*/*", status, ct, msg.response_headers.get_one ("X-Request-Id"));
+            bool waf = waf_challenge ("application/json", status, ct, msg.response_headers.get_one ("X-Request-Id"));
             bool whole = status == 200 && !waf;
             if ((status != 206 && !whole) || (whole && (max <= 0 || msg.response_headers.get_content_length () > max))) {
                 c.cancel ();
@@ -755,6 +755,20 @@ namespace Redmine {
             yield body.close_async ();
             out.close ();
             return out.steal_as_bytes ();
+        }
+
+        /** HTML страницы задачи (листы согласования, spec 10): Basic «ключ:x», страница WAF без заголовка Rails — повтор. */
+        public async string issue_html (int id, Cancellable? c = null) throws Error {
+            for (int attempt = 0; ; attempt++) {
+                var r = yield raw ("GET", url ("issues/%d".printf (id)), "text/html", null, null, true, c);
+                var code = r.msg.status_code;
+                if (code == 200 && r.msg.response_headers.get_one ("X-Request-Id") == null && attempt < WAF_RETRIES) {
+                    yield sleep_ms (300 * (attempt + 1));
+                    continue;
+                }
+                if (code != 200) throw http_error ((int) code, "issue page: HTTP %u".printf (code));
+                return r.text ();
+            }
         }
 
         /** Миниатюра вложения; null — определённое «нет» (не картинка, нет прав). */

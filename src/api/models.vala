@@ -506,4 +506,93 @@ namespace Redmine {
         return res;
     }
 
+
+    // ---- листы согласования (spec 10, набор custom_tables) ----
+
+    /** Текст ячейки HTML: без тегов, сущности раскрыты, пробелы и переносы (и &nbsp;) — один пробел, края обрезаны. */
+    private string html_text (string html) {
+        try {
+            var t = /<[^>]*>/.replace (html, -1, 0, "");
+            t = /&(#\d+|#x[0-9a-fA-F]+|[a-z]+);/.replace_eval (t, -1, 0, 0, (mi, res) => {
+                var e = mi.fetch (1);
+                switch (e) {
+                    case "amp": res.append ("&"); break;
+                    case "lt": res.append ("<"); break;
+                    case "gt": res.append (">"); break;
+                    case "quot": res.append ("\""); break;
+                    case "apos": res.append ("'"); break;
+                    case "nbsp": res.append (" "); break;
+                    default:
+                        uint64 cp = 0;
+                        if (e[0] == '#' && ((e[1] == 'x' && uint64.try_parse (e.substring (2), out cp, null, 16)) || uint64.try_parse (e.substring (1), out cp))
+                            && ((unichar) cp).validate () && cp > 0) res.append_unichar ((unichar) cp);
+                        else res.append (mi.fetch (0));
+                        break;
+                }
+                return false;
+            });
+            return new Regex ("[\\s\\x{00A0}]+").replace (t, -1, 0, " ").strip ();
+        } catch (RegexError e) {
+            return html;
+        }
+    }
+
+    /**
+     * Таблицы плагина custom tables из HTML страницы задачи: каждая <form data-cm-url="/custom_entities/…">,
+     * заголовок — ближайший выше <p><strong>…</strong></p>, колонки и ячейки — с классом cf_*; /users/N → user_id.
+     */
+    public Json.Array custom_tables (string html) {
+        var res = new Json.Array ();
+        try {
+            var form = new Regex ("<form[^>]*data-cm-url=\"/custom_entities/.*?</form>", RegexCompileFlags.DOTALL);
+            var title = new Regex ("<p>\\s*<strong>(.*?)</strong>\\s*</p>", RegexCompileFlags.DOTALL);
+            var th = new Regex ("<th[^>]*class=\"[^\"]*\\bcf_\\d+[^\"]*\"[^>]*>(.*?)</th>", RegexCompileFlags.DOTALL);
+            var tr = new Regex ("<tr[^>]*>(.*?)</tr>", RegexCompileFlags.DOTALL);
+            var td = new Regex ("<td[^>]*class=\"[^\"]*\\bcf_\\d+[^\"]*\"[^>]*>(.*?)</td>", RegexCompileFlags.DOTALL);
+            var user = new Regex ("href=\"/users/(\\d+)\"");
+            MatchInfo fm;
+            int from = 0;
+            for (form.match (html, 0, out fm); fm.matches (); fm.next ()) {
+                int fs, fe;
+                fm.fetch_pos (0, out fs, out fe);
+                var t = new Json.Object ();
+                string name = "";
+                MatchInfo tm;
+                var before = html.substring (from, fs - from);
+                if (title.match (before, 0, out tm)) do { name = html_text (tm.fetch (1)); } while (tm.next ());
+                from = fe;
+                t.set_string_member ("title", name);
+                var body = fm.fetch (0);
+                var cols = new Json.Array ();
+                var tb = body.index_of ("<tbody");
+                var head = tb >= 0 ? body.substring (0, tb) : body;
+                MatchInfo m;
+                for (th.match (head, 0, out m); m.matches (); m.next ()) cols.add_string_element (html_text (m.fetch (1)));
+                t.set_array_member ("columns", cols);
+                var rows = new Json.Array ();
+                if (tb >= 0) {
+                    var tbody = body.substring (tb);
+                    for (tr.match (tbody, 0, out m); m.matches (); m.next ()) {
+                        var row = new Json.Array ();
+                        MatchInfo cm;
+                        var tr_html = m.fetch (1);
+                        for (td.match (tr_html, 0, out cm); cm.matches (); cm.next ()) {
+                            var cell = new Json.Object ();
+                            var inner = cm.fetch (1);
+                            cell.set_string_member ("text", html_text (inner));
+                            MatchInfo um;
+                            if (user.match (inner, 0, out um)) cell.set_int_member ("user_id", int.parse (um.fetch (1)));
+                            row.add_object_element (cell);
+                        }
+                        rows.add_array_element (row);
+                    }
+                }
+                t.set_array_member ("rows", rows);
+                res.add_object_element (t);
+            }
+        } catch (RegexError e) {
+            warning ("custom tables: %s", e.message);
+        }
+        return res;
+    }
 }

@@ -628,6 +628,9 @@ msgstr "Обновлена"
 msgid "Closed on"
 msgstr "Закрыта"
 
+msgid "No entries"
+msgstr "Записей нет"
+
 msgid "No description"
 msgstr "Без описания"
 
