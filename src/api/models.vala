@@ -580,6 +580,8 @@ namespace Redmine {
             var tr = new Regex ("<tr[^>]*>(.*?)</tr>", RegexCompileFlags.DOTALL);
             var td = new Regex ("<td[^>]*class=\"[^\"]*\\bcf_\\d+[^\"]*\"[^>]*>(.*?)</td>", RegexCompileFlags.DOTALL);
             var user = new Regex ("href=\"/users/(\\d+)\"");
+            var add_link = new Regex ("custom_entities/new\\?[^\"]*?custom_table_id=(\\d+)");
+            var row_id = new Regex ("<input[^>]*name=\"ids\\[\\]\"[^>]*value=\"(\\d+)\"|<input[^>]*value=\"(\\d+)\"[^>]*name=\"ids\\[\\]\"");
             MatchInfo fm;
             int from = 0;
             for (form.match (html, 0, out fm); fm.matches (); fm.next ()) {
@@ -590,6 +592,10 @@ namespace Redmine {
                 MatchInfo tm;
                 var before = html.substring (from, fs - from);
                 if (title.match (before, 0, out tm)) do { name = html_text (tm.fetch (1)); } while (tm.next ());
+                // «Добавить» над формой: custom_table_id (для ссылки на новую строку на сайте)
+                int table_id = 0;
+                MatchInfo am;
+                if (add_link.match (before, 0, out am)) do { table_id = int.parse (am.fetch (1)); } while (am.next ());
                 from = fe;
                 t.set_string_member ("title", name);
                 var body = fm.fetch (0);
@@ -600,6 +606,7 @@ namespace Redmine {
                 for (th.match (head, 0, out m); m.matches (); m.next ()) cols.add_string_element (html_text (m.fetch (1)));
                 t.set_array_member ("columns", cols);
                 var rows = new Json.Array ();
+                var ids = new Json.Array ();
                 if (tb >= 0) {
                     var tbody = body.substring (tb);
                     for (tr.match (tbody, 0, out m); m.matches (); m.next ()) {
@@ -615,9 +622,16 @@ namespace Redmine {
                             row.add_object_element (cell);
                         }
                         rows.add_array_element (row);
+                        MatchInfo im;
+                        if (row_id.match (tr_html, 0, out im)) {
+                            var v = im.fetch (1);
+                            ids.add_int_element (int.parse (v != null && v != "" ? v : im.fetch (2)));
+                        } else ids.add_null_element ();
                     }
                 }
                 t.set_array_member ("rows", rows);
+                if (table_id > 0) t.set_int_member ("table_id", table_id); else t.set_null_member ("table_id");
+                t.set_array_member ("row_ids", ids);
                 res.add_object_element (t);
             }
         } catch (RegexError e) {

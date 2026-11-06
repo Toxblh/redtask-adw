@@ -643,6 +643,12 @@ msgstr "Ещё"
 msgid "Refreshing…"
 msgstr "Обновляется…"
 
+msgid "Add on Website"
+msgstr "Добавить на сайте"
+
+msgid "Open on Website"
+msgstr "Открыть на сайте"
+
 msgid "As Board"
 msgstr "Доской"
 

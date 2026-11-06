@@ -826,10 +826,27 @@ namespace Redmine {
             foreach (var tn in ts.get_elements ()) {
                 var t = tn.get_object ();
                 var cols = t.get_array_member ("columns");
-                body.append (heading (jstr (t, "title")));
+                var head = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+                var hl = heading (jstr (t, "title"));
+                hl.hexpand = true;
+                head.append (hl);
+                // «Добавить» — на сайте: правки через API плагина пока нет (spec 10)
+                var tid = jint (t, "table_id");
+                if (tid > 0) {
+                    var add = new Gtk.Button.from_icon_name ("list-add-symbolic") { tooltip_text = _("Add on Website"), valign = Gtk.Align.CENTER };
+                    add.add_css_class ("flat");
+                    var iid = issue.id;
+                    add.clicked.connect (() => open_site ("/custom_entities/new?custom_table_id=%d&issue_id=%d".printf (tid, iid)));
+                    head.append (add);
+                }
+                body.append (head);
                 var list = new Gtk.ListBox () { selection_mode = Gtk.SelectionMode.NONE };
                 list.add_css_class ("boxed-list");
+                var row_ids = t.has_member ("row_ids") ? t.get_array_member ("row_ids") : null;
+                uint ri = 0;
                 foreach (var rn in t.get_array_member ("rows").get_elements ()) {
+                    var rid = row_ids != null && ri < row_ids.get_length () && !row_ids.get_element (ri).is_null () ? (int) row_ids.get_int_element (ri) : 0;
+                    ri++;
                     var line = new Adw.WrapBox () { child_spacing = 12, line_spacing = 4, margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 12 };
                     var cells = rn.get_array ();
                     for (uint k = 0; k < cells.get_length (); k++) {
@@ -850,8 +867,15 @@ namespace Redmine {
                         var l = new Gtk.Label (col != "" ? "%s: %s".printf (col, text) : text) { wrap = true, xalign = 0, valign = Gtk.Align.CENTER, selectable = true };
                         line.append (l);
                     }
-                    list.append (new Gtk.ListBoxRow () { child = line, activatable = false });
+                    var lr = new Gtk.ListBoxRow () { child = line };
+                    lr.set_data<int> ("rid", rid);
+                    lr.set_data<Json.Array> ("cells", cells);
+                    list.append (lr);
                 }
+                list.row_activated.connect ((r) => {
+                    var cs = r.get_data<Json.Array> ("cells");
+                    if (cs != null) new SheetRowDialog (jstr (t, "title"), cols, cs, r.get_data<int> ("rid")).present (this);
+                });
                 if (t.get_array_member ("rows").get_length () == 0) {
                     var l = new Gtk.Label (_("No entries")) { margin_top = 10, margin_bottom = 10 };
                     l.add_css_class ("dim-label");
@@ -859,6 +883,11 @@ namespace Redmine {
                 }
                 body.append (list);
             }
+        }
+
+        private void open_site (string path) {
+            var s = App.get ().session;
+            if (s != null) new Gtk.UriLauncher (s.server + path).launch.begin (win (), null);
         }
 
         private void render_watchers () {
@@ -1193,6 +1222,53 @@ namespace Redmine {
             // только списки задач: «обновить» колокольчика — это внеочередной опрос сервера
             var sec = App.get ().main_window ().current_section ();
             if (sec is IssueListSection) sec.refresh ();
+        }
+    }
+}
+
+namespace Redmine {
+    /**
+     * Карточка строки листа согласования (spec 10): все колонки «Колонка: значение» (пустые — «—»), согласующий — аватар
+     * и имя (карточка человека); «Открыть на сайте» — /custom_entities/{id} во внешнем браузере (у GNOME нет веб-просмотра
+     * с сессией сайта). Только чтение.
+     */
+    public class SheetRowDialog : Adw.Dialog {
+        public SheetRowDialog (string table, Json.Array cols, Json.Array cells, int row_id) {
+            title = table;
+            content_width = 420;
+            var pp = new Adw.PreferencesPage ();
+            var g = new Adw.PreferencesGroup ();
+            for (uint k = 0; k < cells.get_length (); k++) {
+                var c = cells.get_object_element (k);
+                var col = k < cols.get_length () ? cols.get_string_element (k) : "";
+                var text = jstr (c, "text");
+                var r = new Adw.ActionRow () { title = col, subtitle = text != "" ? text : "—", use_markup = false };
+                r.add_css_class ("property");
+                var uid = jint (c, "user_id");
+                if (uid > 0) {
+                    r.add_prefix (Avatars.make (uid, text, 32));
+                    r.activatable = true;
+                    r.add_suffix (new Gtk.Image.from_icon_name ("go-next-symbolic"));
+                    r.activated.connect (() => new PersonCard (uid, text).present (this));
+                } else if (text == "Согласовано") {
+                    r.add_suffix (status_pill (text, true));
+                }
+                g.add (r);
+            }
+            pp.add (g);
+            if (row_id > 0) {
+                var lg = new Adw.PreferencesGroup ();
+                var open = new Adw.ButtonRow () { title = _("Open on Website"), end_icon_name = "adw-external-link-symbolic" };
+                open.activated.connect (() => {
+                    var s = App.get ().session;
+                    if (s != null) new Gtk.UriLauncher (s.server + "/custom_entities/%d".printf (row_id)).launch.begin (get_root () as Gtk.Window, null);
+                });
+                lg.add (open);
+                pp.add (lg);
+            }
+            var tv = new Adw.ToolbarView () { content = pp };
+            tv.add_top_bar (new Adw.HeaderBar ());
+            child = tv;
         }
     }
 }
