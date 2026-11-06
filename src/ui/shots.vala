@@ -11,6 +11,7 @@ namespace Redmine {
      * REDTASK_SHOT_SCROLL=px — прокрутка открытой задачи.
      * REDTASK_SHOT_TYPE=текст — набрать в редакторе открытого диалога.
      * REDTASK_SHOT_MORE=1 — выбрать второй аватар исполнителя доски и открыть «+N».
+     * REDTASK_SHOT_REFRESH=1 — обновить всё за 150 мс до снимка (спиннеры «Обновить»).
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
@@ -108,6 +109,11 @@ namespace Redmine {
                 var second = mb?.get_parent ()?.get_first_child ()?.get_next_sibling () as Gtk.ToggleButton;
                 if (second != null) second.active = true;
                 if (mb != null) { mb.popover.autohide = false; mb.popover.popup (); }
+                return Source.REMOVE;
+            });
+            // REDTASK_SHOT_REFRESH=1 — «Обновить» (Ctrl+R) за 150 мс до снимка: в шапках — спиннер (spec 12)
+            if (Environment.get_variable ("REDTASK_SHOT_REFRESH") != null) Timeout.add (delay - 150, () => {
+                w.activate_action ("refresh", null);
                 return Source.REMOVE;
             });
             int ticks = 0;

@@ -13,6 +13,8 @@ namespace Redmine {
         [GtkChild] private unowned Adw.NavigationPage sections_page;
         [GtkChild] private unowned Adw.HeaderBar list_header;
         private Gtk.Button search_button;
+        private RefreshButton list_refresh;
+        private Binding? list_busy = null;
 
         private LoginView? login_view = null;
         private bool built = false;
@@ -40,7 +42,8 @@ namespace Redmine {
             search_button = new Gtk.Button.from_icon_name ("system-search-symbolic") { tooltip_text = _("Search Issues"), visible = false };
             search_button.clicked.connect (push_search);
             list_header.pack_end (search_button);
-            list_header.pack_start (refresh_button (() => current_section ()?.refresh ()));
+            list_refresh = new RefreshButton (() => current_section ()?.refresh ());
+            list_header.pack_start (list_refresh);
             inner.notify["collapsed"].connect (sync_narrow);
 
             ActionEntry[] actions = {
@@ -56,6 +59,12 @@ namespace Redmine {
                 section_title.title = page != null ? page.title : "";
                 sections_page.title = section_title.title;
                 current_section ()?.shown ();
+                // спиннер «Обновить» — по показанному разделу
+                list_busy?.unbind ();
+                list_busy = null;
+                var sec = current_section ();
+                if (sec != null) list_busy = sec.bind_property ("refreshing", list_refresh, "busy", BindingFlags.SYNC_CREATE);
+                else list_refresh.busy = false;
             });
             if (Environment.get_variable ("REDTASK_SHOT") != null) Shots.schedule (this);
         }
@@ -322,10 +331,13 @@ namespace Redmine {
         public abstract void shown ();
         public abstract void refresh ();
         public abstract void start_search ();
+        /** Идёт обновление уже показанного (spec 12): «Обновить» в шапке — спиннером. */
+        public abstract bool refreshing { get; set; }
     }
 
     public interface Refreshable : Object {
         public abstract void refresh ();
+        public abstract bool refreshing { get; set; }
     }
 
     public Window? win_of (Gtk.Widget w) {

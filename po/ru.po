@@ -640,6 +640,9 @@ msgstr "Нет приложения для звонков"
 msgid "More"
 msgstr "Ещё"
 
+msgid "Refreshing…"
+msgstr "Обновляется…"
+
 msgid "As Board"
 msgstr "Доской"
 

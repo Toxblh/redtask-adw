@@ -54,6 +54,7 @@ namespace Redmine {
     }
 
     public class IssuePage : Adw.NavigationPage, Refreshable {
+        public bool refreshing { get; set; }
         public int issue_id;
         private int pending_note;
         private int pending_index;
@@ -91,7 +92,7 @@ namespace Redmine {
             wt = new Adw.WindowTitle ("#%d".printf (id), "");
             var hb = new Adw.HeaderBar () { title_widget = wt };
             menu_btn = new Gtk.MenuButton () { icon_name = "view-more-symbolic", tooltip_text = _("Issue Menu") };
-            hb.pack_start (refresh_button (() => refresh ()));
+            hb.pack_start (refresh_button (this, () => refresh ()));
             hb.pack_end (menu_btn);
             star = new Gtk.ToggleButton () { icon_name = "non-starred-symbolic" };
             var favs = Favorites.get_default ();
@@ -180,11 +181,13 @@ namespace Redmine {
                     render ();
                 }
             }
+            refreshing = issue != null;
             fresh_tables = null;
             load_tables.begin (s, my); // HTML страницы — параллельно, показ задачи не ждёт
             try {
                 var fresh = yield s.api.issue (issue_id);
                 if (my != gen) return;
+                refreshing = false;
                 // листы согласования: свежие, если HTML уже пришёл, иначе прежние из кэша
                 if (fresh_tables != null) fresh.o.set_array_member ("_custom_tables", fresh_tables);
                 else if (issue != null && issue.o.has_member ("_custom_tables")) fresh.o.set_member ("_custom_tables", issue.o.get_member ("_custom_tables").copy ());
@@ -196,6 +199,7 @@ namespace Redmine {
                 render ();
             } catch (Error e) {
                 if (my != gen) return;
+                refreshing = false;
                 if (issue == null) { state.error (e); return; }
                 win ()?.toast (_("Could not refresh the issue: %s").printf (e.message));
                 return;

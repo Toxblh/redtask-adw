@@ -45,10 +45,33 @@ namespace Redmine {
         }
     }
 
-    /** «Обновить» — в начале шапки своей панели (HIG: основные действия в начале header bar), вместо «потянуть вниз» с Android/iOS. */
-    public Gtk.Button refresh_button (owned Callback on_click) {
-        var b = new Gtk.Button.from_icon_name ("view-refresh-symbolic") { tooltip_text = _("Refresh") };
-        b.clicked.connect (() => on_click ());
+    /**
+     * «Обновить» — в начале шапки своей панели (HIG: основные действия в начале header bar), вместо «потянуть вниз»
+     * с Android/iOS. Пока busy (spec 12), на её месте спиннер того же размера, нажатия не принимаются.
+     */
+    public class RefreshButton : Adw.Bin {
+        public bool busy { get; set; }
+
+        public RefreshButton (owned Callback on_click) {
+            var b = new Gtk.Button.from_icon_name ("view-refresh-symbolic") { tooltip_text = _("Refresh") };
+            b.clicked.connect (() => { if (!busy) on_click (); });
+            var spin = new Adw.Spinner () { width_request = 16, height_request = 16, halign = Gtk.Align.CENTER, valign = Gtk.Align.CENTER };
+            var stack = new Gtk.Stack () { hhomogeneous = true, vhomogeneous = true };
+            stack.add_named (b, "button");
+            stack.add_named (spin, "busy");
+            child = stack;
+            notify["busy"].connect (() => {
+                stack.visible_child_name = busy ? "busy" : "button";
+                sensitive = !busy;
+                update_property (Gtk.AccessibleProperty.LABEL, busy ? _("Refreshing…") : _("Refresh"), -1);
+            });
+        }
+    }
+
+    /** Кнопка «Обновить», занятая, пока owner.refreshing (Refreshable или раздел). */
+    public RefreshButton refresh_button (Object owner, owned Callback on_click) {
+        var b = new RefreshButton ((owned) on_click);
+        owner.bind_property ("refreshing", b, "busy", BindingFlags.SYNC_CREATE);
         return b;
     }
 

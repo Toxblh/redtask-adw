@@ -3,6 +3,7 @@ namespace Redmine {
 
     public class NotificationsSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
+        public bool refreshing { get; set; }
         private GLib.ListStore store = new GLib.ListStore (typeof (LazyRow));
         private uint render_id = 0;
         private StateView state;
@@ -67,9 +68,11 @@ namespace Redmine {
 
         public void refresh () {
             var s = App.get ().session;
-            if (s == null) return;
+            if (s == null || refreshing) return;
+            refreshing = true;
             App.get ().poller.run.begin ((o, r) => {
                 var ok = App.get ().poller.run.end (r);
+                refreshing = false;
                 foreach (var k in s.notifs.take_unread ().get_values ()) unread.add (k);
                 queue_render ();
                 if (!ok) win_of (this)?.toast (_("Could not check for notifications"));

@@ -48,6 +48,7 @@ namespace Redmine {
     }
 
     public class ProjectPage : Adw.NavigationPage, Refreshable {
+        public bool refreshing { get; set; }
         private int project_id;
         private Adw.ViewStack stack;
         private IssueList issues;
@@ -63,6 +64,7 @@ namespace Redmine {
             want_tab = tab;
             stack = new Adw.ViewStack ();
             issues = new IssueList (ListKind.PROJECT, id);
+            issues.bind_property ("refreshing", this, "refreshing");
             stack.add_titled_with_icon (issues, "issues", _("Issues"), "checkbox-checked-symbolic");
             add_tab ("overview", _("Overview"), "help-about-symbolic");
             add_tab ("versions", _("Versions"), "emoji-flags-symbolic");
@@ -72,7 +74,7 @@ namespace Redmine {
             foreach (var t in new string[] { "versions", "wiki", "files" }) show_tab (t, false);
 
             var hb = new Adw.HeaderBar ();
-            hb.pack_start (refresh_button (() => refresh ()));
+            hb.pack_start (refresh_button (this, () => refresh ()));
             var add = new Gtk.Button.from_icon_name ("list-add-symbolic") { tooltip_text = _("New Issue in Project") };
             add.clicked.connect (() => win_of (this)?.new_issue (project_id, 0));
             hb.pack_end (add);
@@ -142,7 +144,9 @@ namespace Redmine {
             loaded.add (name);
             var st = states[name];
             var box = boxes[name];
-            if (box.get_first_child () == null) st.loading ();
+            var had = box.get_first_child () != null;
+            if (!had) st.loading ();
+            else refreshing = true;
             try {
                 switch (name) {
                     case "overview": yield fill_overview (s, box); break;
@@ -157,8 +161,10 @@ namespace Redmine {
                 if (error_code (e) == 403 || error_code (e) == 404) {
                     show_tab (name, false);
                     stack.visible_child_name = "overview";
-                } else st.error (e);
+                } else if (had) win_of (this)?.toast_error (e); // обновление: содержимое остаётся
+                else st.error (e);
             }
+            refreshing = false;
         }
 
         private async void fill_overview (Session s, Gtk.Box box) throws Error {
@@ -385,6 +391,7 @@ namespace Redmine {
      * аватары исполнителей (несколько сразу, лишние — «+N»), Список / Доска.
      */
     public class VersionPage : Adw.NavigationPage, Refreshable {
+        public bool refreshing { get; set; }
         private int version_id;
         private int parent_id = 0;
         private string parent_subject = "";
@@ -425,7 +432,7 @@ namespace Redmine {
             view.add_css_class ("flat");
             Prefs.get_default ().s.bind ("version-view", view, "active-name", SettingsBindFlags.DEFAULT);
             var hb = new Adw.HeaderBar ();
-            hb.pack_start (refresh_button (() => refresh ()));
+            hb.pack_start (refresh_button (this, () => refresh ()));
             hb.pack_end (view);
 
             info = new Gtk.Box (Gtk.Orientation.VERTICAL, 4);
@@ -485,14 +492,17 @@ namespace Redmine {
                 int[] order = {};
                 foreach (var st in yield s.refs.statuses ()) order += jint (st, "id");
                 status_order = order;
+                refreshing = fresh && all.length > 0;
                 all = parent_id > 0 ? yield all_issues (new IssueQuery () { parent_id = parent_id }) : yield version_issues (version_id, fresh);
                 render_info ();
                 fill_assignees ();
                 apply ();
                 state.content ();
             } catch (Error e) {
-                state.error (e);
+                // обновление: содержимое остаётся, ошибка — тостом (spec 12)
+                if (all.length > 0) win_of (this)?.toast_error (e); else state.error (e);
             }
+            refreshing = false;
         }
 
         private void render_info () {
@@ -645,6 +655,7 @@ namespace Redmine {
 
     /** Страница вики: текст тем же Textile-рендером, [[ссылки]] — в приложении; автор, дата, версия, «Открыть в браузере». */
     public class WikiPage : Adw.NavigationPage, Refreshable {
+        public bool refreshing { get; set; }
         private string project;
         private string page_title;
         private StateView state;
@@ -655,7 +666,7 @@ namespace Redmine {
             this.project = project;
             page_title = title;
             var hb = new Adw.HeaderBar ();
-            hb.pack_start (refresh_button (() => refresh ()));
+            hb.pack_start (refresh_button (this, () => refresh ()));
             var web = new Gtk.Button.from_icon_name ("web-browser-symbolic") { tooltip_text = _("Open in Browser") };
             web.clicked.connect (() => new Gtk.UriLauncher (web_url ()).launch.begin (win_of (this), null));
             hb.pack_end (web);
@@ -684,6 +695,9 @@ namespace Redmine {
         private async void load () {
             var s = App.get ().session;
             if (s == null) return;
+            var shown = box.get_first_child () != null;
+            if (shown && refreshing) return;
+            refreshing = shown;
             try {
                 var p = jobj (yield s.api.get_obj (path () + ".json", new Query ().add ("include", "attachments")), "wiki_page");
                 clear_box (box);
@@ -701,8 +715,9 @@ namespace Redmine {
                 box.append (c);
                 state.content ();
             } catch (Error e) {
-                state.error (e);
+                if (shown) win_of (this)?.toast_error (e); else state.error (e);
             }
+            refreshing = false;
         }
     }
 }

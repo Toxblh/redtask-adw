@@ -10,6 +10,8 @@ namespace Redmine {
      * сдвиг показывает Gtk.Stack — старое содержимое уезжает снимком, новое въезжает с нужной стороны.
      */
     public class IssueList : Gtk.Box {
+        /** Обновляется уже показанный список (spec 12). */
+        public bool refreshing { get; set; }
         public ListKind kind;
         public int project_id;
         private Adw.ToggleGroup filter;
@@ -185,6 +187,7 @@ namespace Redmine {
 
         private async void fetch (Session s, int my_gen) {
             loading = true;
+            refreshing = items.length > 0;
             try {
                 var page = yield s.api.issues (query ());
                 var got = page.issues;
@@ -202,7 +205,7 @@ namespace Redmine {
                     banner.revealed = true;
                 } else state.error (e);
             } finally {
-                if (my_gen == gen) loading = false;
+                if (my_gen == gen) { loading = false; refreshing = false; }
             }
         }
 
@@ -244,8 +247,11 @@ namespace Redmine {
         public Adw.ViewStackPage page { get; set; }
         private IssueList list;
 
+        public bool refreshing { get; set; }
+
         public IssueListSection (ListKind kind) {
             list = new IssueList (kind);
+            list.bind_property ("refreshing", this, "refreshing", BindingFlags.SYNC_CREATE);
             child = list;
         }
 
@@ -260,6 +266,7 @@ namespace Redmine {
      */
     public class ProjectsSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
+        public bool refreshing { get; set; }
         private Gtk.SearchEntry entry;
         private GLib.ListStore store = new GLib.ListStore (typeof (LazyRow));
         private Gtk.CustomFilter filter;
@@ -299,12 +306,14 @@ namespace Redmine {
             if (cached != null && store.get_n_items () == 0) fill (cached);
             else if (store.get_n_items () == 0) state.loading ();
             if (!fresh && cached != null && !s.refs.projects_stale ()) return;
+            refreshing = store.get_n_items () > 0;
             try {
                 fill (yield s.refs.projects (fresh));
             } catch (Error e) {
                 if (store.get_n_items () == 0) state.error (e);
                 else win_of (this)?.toast_error (e);
             }
+            refreshing = false;
         }
 
         private GenericArray<Json.Object> all = new GenericArray<Json.Object> ();
@@ -384,6 +393,7 @@ namespace Redmine {
     /** Поиск по серверу: текст (search.json) или номер «#123» / «123» — задача первой. */
     public class SearchSection : Adw.Bin, Section {
         public Adw.ViewStackPage page { get; set; }
+        public bool refreshing { get; set; }
         private Gtk.SearchEntry entry;
         private Gtk.ListBox list;
         private StateView state;
@@ -481,7 +491,11 @@ namespace Redmine {
             }
             state.content ();
         }
-        public void refresh () { if (query != "") run.begin (query); }
+        public void refresh () {
+            if (query == "" || refreshing) return;
+            refreshing = true;
+            run.begin (query, (o, r) => { run.end (r); refreshing = false; });
+        }
         public void start_search () { entry.grab_focus (); }
 
         /** status — пилюлей над подписью (null — без статуса). */
