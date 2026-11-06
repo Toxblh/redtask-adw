@@ -72,7 +72,6 @@ namespace Redmine {
                 if (r != null) win_of (this)?.open_issue (r.issue.id);
             });
             // снизу — место под кнопку «Обновить», последняя строка не прячется под ней
-            list.margin_bottom = 66;
             var sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
             sw.edge_reached.connect ((pos) => { if (pos == Gtk.PositionType.BOTTOM) load_more.begin (); });
             state = new StateView (sw) { vexpand = true };
@@ -81,7 +80,7 @@ namespace Redmine {
             slide = new Gtk.Stack () { vexpand = true, transition_duration = 200 };
             slide.add_child (state);
             slide.add_child (old_snap);
-            append (refresh_overlay (slide, () => reload (false)));
+            append (slide);
             setup_swipe ();
             Favorites.get_default ().changed.connect (() => {
                 if (kind == ListKind.FAVORITES && loaded_once) reload (false);

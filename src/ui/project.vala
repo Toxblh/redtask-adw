@@ -72,6 +72,7 @@ namespace Redmine {
             foreach (var t in new string[] { "versions", "wiki", "files" }) show_tab (t, false);
 
             var hb = new Adw.HeaderBar ();
+            hb.pack_start (refresh_button (() => refresh ()));
             var add = new Gtk.Button.from_icon_name ("list-add-symbolic") { tooltip_text = _("New Issue in Project") };
             add.clicked.connect (() => win_of (this)?.new_issue (project_id, 0));
             hb.pack_end (add);
@@ -399,7 +400,6 @@ namespace Redmine {
         private const int MAX_AVATARS = 7;
         private const double AVATAR_STEP = 22; // 32 px со смещением 10 — заход на треть, как в Jira
         private Gtk.Fixed? stack = null;
-        private Gtk.Widget? more_btn = null;
         private Gtk.Stack results;
         private Gtk.ListBox list;
         private Gtk.Box board;
@@ -425,6 +425,7 @@ namespace Redmine {
             view.add_css_class ("flat");
             Prefs.get_default ().s.bind ("version-view", view, "active-name", SettingsBindFlags.DEFAULT);
             var hb = new Adw.HeaderBar ();
+            hb.pack_start (refresh_button (() => refresh ()));
             hb.pack_end (view);
 
             info = new Gtk.Box (Gtk.Orientation.VERTICAL, 4);
@@ -463,7 +464,7 @@ namespace Redmine {
             state.retry_clicked.connect (() => load.begin (true));
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);
-            tv.content = refresh_overlay (state, () => refresh ());
+            tv.content = state;
             child = tv;
             state.loading ();
             load.begin (false);
@@ -524,7 +525,6 @@ namespace Redmine {
             clear_box (avatars);
             // Gtk.Fixed: отрицательный margin в GTK растягивает кнопку, а не сдвигает её — шаг задаём координатами
             stack = new Gtk.Fixed () { overflow = Gtk.Overflow.VISIBLE, margin_top = 3, margin_bottom = 3, margin_start = 3, margin_end = 3 };
-            more_btn = null;
             avatars.append (stack);
             double x = 0;
             var me = App.get ().session.user_id;
@@ -548,7 +548,6 @@ namespace Redmine {
                     t.add_css_class ("avatar-toggle");
                     t.update_property (Gtk.AccessibleProperty.LABEL, tip, -1);
                     t.toggled.connect (() => pick (key, t.active));
-                    t.set_data<int> ("slot", n);
                     stack.put (t, x, 0);
                     x += AVATAR_STEP;
                     continue;
@@ -568,19 +567,7 @@ namespace Redmine {
                 var mb = new Gtk.MenuButton () { child = new Gtk.Label ("+%d".printf (extra)), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more } };
                 mb.add_css_class ("avatar-more");
                 stack.put (mb, x, 0);
-                more_btn = mb;
             }
-            mark_picking ();
-        }
-
-        /** Выбранные — поверх соседей (Gtk.Fixed рисует детей по порядку), чтобы кольцо акцента было видно целиком; «+N» — последним. */
-        private void mark_picking () {
-            if (stack == null) return;
-            var toggles = new GenericArray<Gtk.ToggleButton> ();
-            for (var w = stack.get_first_child (); w != null; w = w.get_next_sibling ()) if (w is Gtk.ToggleButton) toggles.add ((Gtk.ToggleButton) w);
-            toggles.sort ((a, b) => a.get_data<int> ("slot") - b.get_data<int> ("slot"));
-            foreach (var t in toggles) if (!t.active) t.insert_before (stack, more_btn);
-            foreach (var t in toggles) if (t.active) t.insert_before (stack, more_btn);
         }
 
         private static Adw.Avatar assignee_avatar (string key, int me, string label, int size) {
@@ -592,7 +579,6 @@ namespace Redmine {
 
         private void pick (string key, bool on) {
             if (on) picked.add (key); else picked.remove (key);
-            mark_picking ();
             apply ();
         }
 
@@ -669,6 +655,7 @@ namespace Redmine {
             this.project = project;
             page_title = title;
             var hb = new Adw.HeaderBar ();
+            hb.pack_start (refresh_button (() => refresh ()));
             var web = new Gtk.Button.from_icon_name ("web-browser-symbolic") { tooltip_text = _("Open in Browser") };
             web.clicked.connect (() => new Gtk.UriLauncher (web_url ()).launch.begin (win_of (this), null));
             hb.pack_end (web);
@@ -677,7 +664,7 @@ namespace Redmine {
             state.retry_clicked.connect (() => load.begin ());
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);
-            tv.content = refresh_overlay (state, () => refresh ());
+            tv.content = state;
             child = tv;
             state.loading ();
             load.begin ();

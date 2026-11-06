@@ -40,6 +40,7 @@ namespace Redmine {
             search_button = new Gtk.Button.from_icon_name ("system-search-symbolic") { tooltip_text = _("Search Issues"), visible = false };
             search_button.clicked.connect (push_search);
             list_header.pack_end (search_button);
+            list_header.pack_start (refresh_button (() => current_section ()?.refresh ()));
             inner.notify["collapsed"].connect (sync_narrow);
 
             ActionEntry[] actions = {

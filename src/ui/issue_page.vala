@@ -91,6 +91,7 @@ namespace Redmine {
             wt = new Adw.WindowTitle ("#%d".printf (id), "");
             var hb = new Adw.HeaderBar () { title_widget = wt };
             menu_btn = new Gtk.MenuButton () { icon_name = "view-more-symbolic", tooltip_text = _("Issue Menu") };
+            hb.pack_start (refresh_button (() => refresh ()));
             hb.pack_end (menu_btn);
             star = new Gtk.ToggleButton () { icon_name = "non-starred-symbolic" };
             var favs = Favorites.get_default ();
@@ -133,7 +134,7 @@ namespace Redmine {
 
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);
-            tv.content = refresh_overlay (state, () => refresh ());
+            tv.content = state;
             tv.add_bottom_bar (bottom);
             child = tv;
 
