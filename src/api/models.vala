@@ -625,4 +625,39 @@ namespace Redmine {
         }
         return res;
     }
+
+    /**
+     * Телефоны со страницы /people/:id (spec 11, набор people_phones): каждый <span class="value"> в блоке
+     * «value phones» — {text, tel}; tel — «+» и цифры, добавочный («доб.», «ext.», «x») через запятую.
+     */
+    public Json.Array people_phones (string html) {
+        var res = new Json.Array ();
+        try {
+            MatchInfo bm;
+            if (!new Regex ("<div[^>]*class=\"value phones\"[^>]*>(.*?)</div>", RegexCompileFlags.DOTALL).match (html, 0, out bm)) return res;
+            var block = bm.fetch (1);
+            var span = new Regex ("<span[^>]*class=\"value\"[^>]*>(.*?)</span>", RegexCompileFlags.DOTALL);
+            var ext = new Regex ("^(.*?)\\s*(?:доб\\.?|ext\\.?|x)\\s*(\\d+)\\s*$", RegexCompileFlags.CASELESS);
+            MatchInfo m;
+            for (span.match (block, 0, out m); m.matches (); m.next ()) {
+                var text = html_text (m.fetch (1));
+                if (text == "") continue;
+                var main = text;
+                string? add_no = null;
+                MatchInfo em;
+                if (ext.match (text, 0, out em)) { main = em.fetch (1); add_no = em.fetch (2); }
+                var tel = new StringBuilder ();
+                if (main.strip ().has_prefix ("+")) tel.append_c ('+');
+                for (int k = 0; k < main.length; k++) if (main[k].isdigit ()) tel.append_c (main[k]);
+                if (add_no != null) tel.append ("," + add_no);
+                var o = new Json.Object ();
+                o.set_string_member ("text", text);
+                o.set_string_member ("tel", tel.str);
+                res.add_object_element (o);
+            }
+        } catch (RegexError e) {
+            warning ("phones: %s", e.message);
+        }
+        return res;
+    }
 }

@@ -757,18 +757,33 @@ namespace Redmine {
             return out.steal_as_bytes ();
         }
 
-        /** HTML страницы задачи (листы согласования, spec 10): Basic «ключ:x», страница WAF без заголовка Rails — повтор. */
-        public async string issue_html (int id, Cancellable? c = null) throws Error {
+        /** HTML-страница сайта с Basic «ключ:x» (ключ в заголовке такие страницы не принимают); страница WAF без заголовка Rails — повтор. */
+        private async Resp html_page (string path, Cancellable? c = null) throws Error {
             for (int attempt = 0; ; attempt++) {
-                var r = yield raw ("GET", url ("issues/%d".printf (id)), "text/html", null, null, true, c);
-                var code = r.msg.status_code;
-                if (code == 200 && r.msg.response_headers.get_one ("X-Request-Id") == null && attempt < WAF_RETRIES) {
+                var r = yield raw ("GET", url (path), "text/html", null, null, true, c);
+                if (r.msg.status_code == 200 && r.msg.response_headers.get_one ("X-Request-Id") == null && attempt < WAF_RETRIES) {
                     yield sleep_ms (300 * (attempt + 1));
                     continue;
                 }
-                if (code != 200) throw http_error ((int) code, "issue page: HTTP %u".printf (code));
-                return r.text ();
+                return r;
             }
+        }
+
+        /** HTML страницы задачи (листы согласования, spec 10). */
+        public async string issue_html (int id, Cancellable? c = null) throws Error {
+            var r = yield html_page ("issues/%d".printf (id), c);
+            var code = r.msg.status_code;
+            if (code != 200) throw http_error ((int) code, "issue page: HTTP %u".printf (code));
+            return r.text ();
+        }
+
+        /** Страница /people/:id (аватар, телефоны — spec 11); null — профиля нет или он закрыт. */
+        public async string? people_page (int user_id, Cancellable? c = null) throws Error {
+            var r = yield html_page ("people/%d".printf (user_id), c);
+            var code = r.msg.status_code;
+            if (code == 404 || code == 401 || code == 403) return null;
+            if (code < 200 || code >= 300) throw http_error ((int) code, "people: HTTP %u".printf (code));
+            return r.text ();
         }
 
         /** Миниатюра вложения; null — определённое «нет» (не картинка, нет прав). */
@@ -801,11 +816,12 @@ namespace Redmine {
 
         /** Аватар: страница /people/:id (HTML, Basic «ключ:x») → id вложения → картинка. null — фото нет. */
         public async Bytes? avatar (int user_id, Cancellable? c = null) throws Error {
-            var r = yield raw ("GET", url ("people/%d".printf (user_id)), "text/html", null, null, true, c);
-            var msg = r.msg;
-            if (msg.status_code == 404 || msg.status_code == 401 || msg.status_code == 403) return null;
-            if (msg.status_code < 200 || msg.status_code >= 300) throw http_error ((int) msg.status_code, "people: HTTP %u".printf (msg.status_code));
-            var html = r.text ();
+            var html = yield people_page (user_id, c);
+            return html != null ? yield avatar_from_page (html, c) : null;
+        }
+
+        /** Фото со страницы человека: id вложения аватара → картинка; null — фото нет. */
+        public async Bytes? avatar_from_page (string html, Cancellable? c = null) throws Error {
             MatchInfo mi;
             if (!/class="avatar"[\s\S]{0,500}?href="[^"]*?\/attachments\/(\d+)"/.match (html, 0, out mi)) return null;
             var att_id = int.parse (mi.fetch (1));

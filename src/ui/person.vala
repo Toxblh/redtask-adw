@@ -58,7 +58,9 @@ namespace Redmine {
                 shown = fill (id, p, u, np, pp, av, name_l, sub);
                 debug ("person %d: from cache (fresh %s)", id, (fresh_p && u != null && fresh_u).to_string ());
             }
-            if (p != null && fresh_p && u != null && fresh_u) return;
+            bool fresh_ph;
+            s.refs.phones_cached (id, out fresh_ph);
+            if (p != null && fresh_p && u != null && fresh_u && fresh_ph) return;
             Json.Object? np_ = null;
             try {
                 np_ = yield s.refs.person (id, true);
@@ -71,6 +73,7 @@ namespace Redmine {
                 return;
             }
             try { u = yield s.refs.user (id, true); } catch (Error e) { debug ("users/%d: %s", id, e.message); }
+            if (!fresh_ph) try { yield s.refs.phones (id); } catch (Error e) { debug ("phones %d: %s", id, e.message); }
             spinner.visible = false;
             foreach (var g in shown) pp.remove (g);
             fill (id, np_, u, np, pp, av, name_l, sub);
@@ -113,15 +116,10 @@ namespace Redmine {
             var mail = jstr (p, "email") != "" ? jstr (p, "email") : jstr (p, "mail");
             if (mail == "" && u != null) mail = jstr (u, "mail");
             row (contacts, _("Email"), mail, true, "mailto:" + mail);
-            var phones = p.has_member ("phones") ? p.get_member ("phones") : null;
-            if (phones != null && phones.get_node_type () == Json.NodeType.ARRAY) {
-                phones.get_array ().foreach_element ((a, i, e) => {
-                    var num = e.get_node_type () == Json.NodeType.OBJECT ? jstr (e.get_object (), "number") : e.get_string () ?? "";
-                    row (contacts, _("Phone"), num, true, "tel:" + num.replace (" ", ""));
-                });
-            } else if (phones != null && phones.get_value_type () == typeof (string)) {
-                foreach (var num in phones.get_string ().split (",")) row (contacts, _("Phone"), num.strip (), true, "tel:" + num.strip ().replace (" ", ""));
-            }
+            // телефоны — со страницы /people/:id (spec 11): нажатие копирует, tel: — в меню строки
+            bool ph_fresh;
+            var phones = s.refs.phones_cached (id, out ph_fresh);
+            if (phones != null) foreach (var e in phones.get_elements ()) phone_row (contacts, jstr (e.get_object (), "text"), jstr (e.get_object (), "tel"));
             var li = jstr (p, "linkedin");
             row (contacts, "LinkedIn", li, false, li.has_prefix ("http") ? li : "https://www.linkedin.com/in/" + li);
 
@@ -145,6 +143,29 @@ namespace Redmine {
             links.add (open);
             foreach (var g in new Adw.PreferencesGroup[] { work, contacts, acc, about }) g.visible = g.get_row (0) != null;
             return { work, contacts, acc, about, links };
+        }
+
+        /** Телефон: телефонии в GNOME нет — нажатие копирует номер, «Позвонить» (tel:) — в меню строки. */
+        private void phone_row (Adw.PreferencesGroup g, string text, string tel) {
+            if (text == "") return;
+            var r = new Adw.ActionRow () { title = _("Phone"), subtitle = text, use_markup = false, activatable = true, tooltip_text = _("Copy") };
+            r.add_css_class ("property");
+            r.activated.connect (() => { copy_text (this, text); toasts.add_toast (new Adw.Toast (_("Copied"))); });
+            var m = new Menu ();
+            m.append (_("Copy"), "phone.copy");
+            m.append (_("Call"), "phone.call");
+            var ag = new SimpleActionGroup ();
+            var copy = new SimpleAction ("copy", null);
+            copy.activate.connect (() => { copy_text (this, text); toasts.add_toast (new Adw.Toast (_("Copied"))); });
+            ag.add_action (copy);
+            var call = new SimpleAction ("call", null);
+            call.activate.connect (() => new Gtk.UriLauncher ("tel:" + tel).launch.begin (get_root () as Gtk.Window, null));
+            ag.add_action (call);
+            r.insert_action_group ("phone", ag);
+            var mb = new Gtk.MenuButton () { icon_name = "view-more-symbolic", menu_model = m, valign = Gtk.Align.CENTER, tooltip_text = _("More") };
+            mb.add_css_class ("flat");
+            r.add_suffix (mb);
+            g.add (r);
         }
 
         private Adw.PreferencesGroup group (Adw.PreferencesPage pp, string? t) {

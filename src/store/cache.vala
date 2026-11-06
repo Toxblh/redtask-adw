@@ -336,6 +336,28 @@ namespace Redmine {
             return h != null && h.get_node_type () == Json.NodeType.OBJECT ? h.get_object () : null;
         }
 
+        /** Телефоны со страницы /people/:id (spec 11) — в кэш человека; страницу уже скачали ради аватара. */
+        public void learn_phones (int id, string html) {
+            var n = new Json.Node (Json.NodeType.ARRAY);
+            n.set_array (people_phones (html));
+            cache.save ("phones-%d".printf (id), n);
+        }
+
+        /** Сохранённые телефоны: null — страницу ещё не разбирали; fresh — моложе суток. */
+        public Json.Array? phones_cached (int id, out bool fresh) {
+            var h = cache.load ("phones-%d".printf (id));
+            fresh = h != null && cache.load ("phones-%d".printf (id), DAY_MS) != null;
+            return h != null && h.get_node_type () == Json.NodeType.ARRAY ? h.get_array () : null;
+        }
+
+        /** Телефоны с сервера: своя загрузка страницы, если аватар её не принёс. */
+        public async Json.Array phones (int id) throws Error {
+            var html = yield api.people_page (id);
+            learn_phones (id, html ?? "");
+            bool f;
+            return phones_cached (id, out f) ?? new Json.Array ();
+        }
+
         /** /users/:id (логин, регистрация, последний вход): кэш сутки, net — мимо кэша. */
         public async Json.Object user (int id, bool net = false) throws Error {
             var key = "user-%d".printf (id);

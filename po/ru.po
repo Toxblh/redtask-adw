@@ -634,6 +634,12 @@ msgstr "Записей нет"
 msgid "Recent"
 msgstr "Недавние"
 
+msgid "Call"
+msgstr "Позвонить"
+
+msgid "More"
+msgstr "Ещё"
+
 msgid "As Board"
 msgstr "Доской"
 

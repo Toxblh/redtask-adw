@@ -259,7 +259,9 @@ namespace Redmine {
             } catch (Error e) {}
             if (!fresh) {
                 try {
-                    var b = yield s.api.avatar (id);
+                    var html = yield s.api.people_page (id);
+                    if (html != null) s.refs.learn_phones (id, html); // телефоны — из того же ответа (spec 11)
+                    var b = html != null ? yield s.api.avatar_from_page (html) : null;
                     s.cache.save_bytes (key, b ?? new Bytes ({}));
                     publish (id, b != null ? yield decode (b) : null);
                 } catch (Error e) {
