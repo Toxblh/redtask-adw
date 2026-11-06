@@ -631,6 +631,9 @@ msgstr "Закрыта"
 msgid "No entries"
 msgstr "Записей нет"
 
+msgid "Recent"
+msgstr "Недавние"
+
 msgid "As Board"
 msgstr "Доской"
 

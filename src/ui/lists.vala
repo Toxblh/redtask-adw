@@ -398,24 +398,90 @@ namespace Redmine {
             var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
             entry = new Gtk.SearchEntry () { placeholder_text = _("Text or issue number"), margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
             entry.activate.connect (() => run.begin (entry.text.strip ()));
-            entry.search_changed.connect (() => { if (entry.text.strip ().length >= 3) run.begin (entry.text.strip ()); });
+            entry.search_changed.connect (() => {
+                var t = entry.text.strip ();
+                if (t.length >= 3) run.begin (t);
+                else if (t == "") show_recent ();
+            });
             box.append (entry);
             list = new Gtk.ListBox ();
             list.add_css_class ("navigation-sidebar");
             list.row_activated.connect ((row) => {
                 var id = row.get_data<int> ("id");
-                if (id > 0) win_of (this)?.open_issue (id);
+                if (id <= 0) return;
+                remember (row);
+                win_of (this)?.open_issue (id);
             });
             var sw = new Gtk.ScrolledWindow () { child = list, vexpand = true, hscrollbar_policy = Gtk.PolicyType.NEVER };
             sw.edge_reached.connect ((pos) => { if (pos == Gtk.PositionType.BOTTOM) more.begin (); });
             state = new StateView (sw) { vexpand = true };
             state.retry_clicked.connect (() => run.begin (query));
-            state.empty (_("Search Issues"), "system-search-symbolic", _("Enter text or an issue number"));
             box.append (state);
             child = box;
+            show_recent ();
         }
 
-        public void shown () { entry.grab_focus (); }
+        public void shown () {
+            if (entry.text.strip () == "") show_recent ();
+            entry.grab_focus ();
+        }
+
+        // ---- недавние (spec 9): до 10 задач, открытых из результатов; кэш учётки — стирается при выходе ----
+
+        private GenericArray<Json.Object> recent () {
+            var s = App.get ().session;
+            return s != null ? node_arr (s.cache.load ("recent-search")) : new GenericArray<Json.Object> ();
+        }
+
+        /** Открыли из результатов: первой в «Недавних» (набор recent_opened), с темой и статусом для показа. */
+        private void remember (Gtk.ListBoxRow row) {
+            var s = App.get ().session;
+            if (s == null) return;
+            var id = row.get_data<int> ("id");
+            var old = recent ();
+            int[] ids = {};
+            foreach (var o in old) ids += jint (o, "id");
+            var res = new GenericArray<Json.Object> ();
+            foreach (var x in recent_opened (ids, id)) {
+                if (x == id) {
+                    var o = new Json.Object ();
+                    o.set_int_member ("id", id);
+                    o.set_string_member ("subject", row.get_data<string> ("subject") ?? "");
+                    o.set_string_member ("status", row.get_data<string> ("status") ?? "");
+                    o.set_boolean_member ("closed", row.get_data<bool> ("closed"));
+                    res.add (o);
+                } else foreach (var o in old) if (jint (o, "id") == x) res.add (o);
+            }
+            s.cache.save ("recent-search", arr_node (res));
+        }
+
+        private void show_recent () {
+            gen++;
+            query = "";
+            list.remove_all ();
+            var items = recent ();
+            if (items.length == 0) {
+                state.empty (_("Search Issues"), "system-search-symbolic", _("Enter text or an issue number"));
+                return;
+            }
+            var head = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6) { margin_start = 6, margin_top = 6 };
+            var l = new Gtk.Label (_("Recent")) { xalign = 0, hexpand = true };
+            l.add_css_class ("heading");
+            head.append (l);
+            var clear = new Gtk.Button.with_label (_("Clear"));
+            clear.add_css_class ("flat");
+            clear.clicked.connect (() => {
+                App.get ().session?.cache.drop ("recent-search");
+                show_recent ();
+            });
+            head.append (clear);
+            list.append (new Gtk.ListBoxRow () { child = head, activatable = false, selectable = false });
+            foreach (var o in items) {
+                var st = jstr (o, "status");
+                add_row (jint (o, "id"), "#%d %s".printf (jint (o, "id"), jstr (o, "subject")), "", st != "" ? st : null, jbool (o, "closed"));
+            }
+            state.content ();
+        }
         public void refresh () { if (query != "") run.begin (query); }
         public void start_search () { entry.grab_focus (); }
 
@@ -433,6 +499,11 @@ namespace Redmine {
             }
             row.child = b;
             row.set_data<int> ("id", id);
+            // для «Недавних»: тема без «Трекер #N: », статус
+            MatchInfo mi;
+            row.set_data<string> ("subject", /^.*?#\d+:? (.*)$/s.match (title, 0, out mi) ? mi.fetch (1) : title);
+            row.set_data<string> ("status", status ?? "");
+            row.set_data<bool> ("closed", closed);
             list.append (row);
         }
 
