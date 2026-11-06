@@ -328,6 +328,134 @@ namespace Redmine {
         }
     }
 
+    /**
+     * Миниатюра документа без открытия (spec 4.1): Range на хвост, 206 — запись миниатюры по zip_tail и второй Range;
+     * 200 — сервер Range не умеет: до 1 МБ файл дочитывается в кэш открытия, больше — обрыв. Результат — навсегда:
+     * thumb-ID или отметка nothumb-ID. null — миниатюры нет (или сбой сети: тогда спросим при следующем показе).
+     */
+    async Bytes? remote_embedded_thumbnail (Json.Object att) {
+        var s = App.get ().session;
+        if (s == null) return null;
+        var id = jint (att, "id");
+        var size = (int64) jdouble (att, "filesize");
+        var u = jstr (att, "content_url");
+        Bytes? thumb = null;
+        try {
+            uint code;
+            // размер известен заранее: больше 1 МБ — целиком не качаем, ответ 200 рвём, не читая (у my.basealt.space нет Content-Length)
+            var got = yield s.api.get_range (u, "bytes=-65536", size <= (1 << 20) ? (1 << 20) : 0, out code);
+            if (got != null && code == 200) {
+                var path = open_path (att);
+                DirUtils.create_with_parents (Path.get_dirname (path), 0700);
+                FileUtils.set_data (path, got.get_data ());
+                thumb = yield in_thread (() => embedded_thumbnail (got));
+            } else if (got != null && code == 206) {
+                var e = zip_tail_entry (size, got);
+                if (e != null) {
+                    // ponytail: «extra» локального заголовка — с запасом 1 КБ; длиннее — миниатюры не будет
+                    var end = e.local_offset + 30 + e.name.length + e.compressed_size + 1024;
+                    var local = yield s.api.get_range (u, "bytes=%lld-%lld".printf (e.local_offset, int64.min (end, size) - 1), 0, out code);
+                    if (local != null && code == 206) thumb = yield in_thread (() => zip_entry_data (e, local));
+                }
+            }
+        } catch (Error err) {
+            debug ("thumbnail %d: %s", id, err.message);
+            return null;
+        }
+        if (thumb != null) s.cache.save_bytes ("thumb-%d".printf (id), thumb);
+        else s.cache.save_bytes ("nothumb-%d".printf (id), new Bytes ({}));
+        return thumb;
+    }
+
+    delegate Bytes? BytesJob ();
+
+    async Bytes? in_thread (owned BytesJob job) {
+        Bytes? res = null;
+        SourceFunc cb = in_thread.callback;
+        new Thread<void> ("thumb", () => { res = job (); Idle.add ((owned) cb); });
+        yield;
+        return res;
+    }
+
+    /** Очередь миниатюр без открытия: не больше 2 запросов сразу и только для строк, что видны в прокрутке. */
+    namespace RemoteThumbs {
+        public delegate void Done (Gdk.Texture t);
+
+        class Job {
+            public weak Gtk.Widget row;
+            public Json.Object att;
+            public Done done;
+        }
+
+        GenericArray<Job>? pending = null;
+        int running = 0;
+        /** Вложение в работе: тот же файл в списке задачи и в комментарии — один запрос. */
+        GenericSet<int>? busy = null;
+
+        public void add (Gtk.Widget row, Json.Object att, owned Done done) {
+            if (pending == null) {
+                pending = new GenericArray<Job> ();
+                busy = new GenericSet<int> (direct_hash, direct_equal);
+            }
+            var j = new Job () { row = row, att = att, done = (owned) done };
+            pending.add (j);
+            row.map.connect (pump);
+            row.unmap.connect (() => pending.remove (j));
+            pump ();
+        }
+
+        /** Строка на экране: целиком или частью внутри своей прокрутки. */
+        bool in_view (Gtk.Widget row) {
+            if (!row.get_mapped ()) return false;
+            var sw = row.get_ancestor (typeof (Gtk.ScrolledWindow)) as Gtk.ScrolledWindow;
+            if (sw == null) return true;
+            if (sw.get_data<bool> ("thumbs") == false) {
+                sw.set_data<bool> ("thumbs", true);
+                sw.vadjustment.value_changed.connect (pump_later);
+            }
+            Graphene.Rect r;
+            if (!row.compute_bounds (sw, out r)) return false;
+            return r.origin.y + r.size.height > 0 && r.origin.y < sw.get_height ();
+        }
+
+        uint later = 0;
+
+        /** После прокрутки: строки встают на места только к следующей раскладке. */
+        void pump_later () {
+            if (later != 0) return;
+            later = Timeout.add (150, () => { later = 0; pump (); return Source.REMOVE; });
+        }
+
+        void pump () {
+            if (pending == null) return;
+            for (int k = 0; k < pending.length && running < 2; k++) {
+                var j = pending[k];
+                if (j.row == null) { pending.remove_index (k--); continue; }
+                var id = jint (j.att, "id");
+                if (busy.contains (id) || !in_view (j.row)) continue;
+                pending.remove_index (k--);
+                var s = App.get ().session;
+                if (s == null) continue;
+                var ready = s.cache.load_bytes ("thumb-%d".printf (id));
+                if (ready != null || s.cache.load_bytes ("nothumb-%d".printf (id)) != null) {
+                    try { if (ready != null) j.done (Gdk.Texture.from_bytes (ready)); } catch (Error e) {}
+                    continue;
+                }
+                running++;
+                busy.add (id);
+                remote_embedded_thumbnail.begin (j.att, (o, r) => {
+                    var b = remote_embedded_thumbnail.end (r);
+                    running--;
+                    busy.remove (id);
+                    if (b != null) {
+                        try { j.done (Gdk.Texture.from_bytes (b)); } catch (Error e) {}
+                    }
+                    pump ();
+                });
+            }
+        }
+    }
+
     /** Строка файла: значок или миниатюра, размер · автор · когда; нажатие — просмотр или скачивание. */
     public Adw.ActionRow attachment_row (Json.Object att) {
         var name = jstr (att, "filename");
@@ -345,7 +473,18 @@ namespace Redmine {
             if (t != null) { icon.paintable = t; icon.pixel_size = 40; has_thumb = true; }
         };
         if (src == "server") load_attachment_texture.begin (att, true, null, show);
-        if (src == "embedded") load_embedded_thumbnail.begin (att, show);
+        if (src == "embedded") load_embedded_thumbnail.begin (att, (o, r) => {
+            var t = load_embedded_thumbnail.end (r);
+            if (t != null) { icon.paintable = t; icon.pixel_size = 40; has_thumb = true; return; }
+            var s = App.get ().session;
+            if (s == null || s.cache.load_bytes ("nothumb-%d".printf (jint (att, "id"))) != null) return;
+            RemoteThumbs.add (row, att, (tex) => {
+                if (has_thumb) return;
+                icon.paintable = tex;
+                icon.pixel_size = 40;
+                has_thumb = true;
+            });
+        });
         row.activated.connect ((r) => open_attachment.begin (r, att, (o, res) => {
             open_attachment.end (res);
             // только что скачали документ — его миниатюра уже есть
@@ -386,10 +525,14 @@ namespace Redmine {
         if (s == null) return;
         var w = win_of (from);
         try {
-            var b = yield s.api.download (jstr (att, "content_url"));
             var path = open_path (att);
-            DirUtils.create_with_parents (Path.get_dirname (path), 0700);
-            FileUtils.set_data (path, b.get_data ());
+            // уже скачан (открывали или качали ради миниатюры): вложения в Redmine не меняются
+            var f = File.new_for_path (path);
+            if (!f.query_exists () || f.query_info (FileAttribute.STANDARD_SIZE, 0).get_size () != (int64) jdouble (att, "filesize")) {
+                var b = yield s.api.download (jstr (att, "content_url"));
+                DirUtils.create_with_parents (Path.get_dirname (path), 0700);
+                FileUtils.set_data (path, b.get_data ());
+            }
             if (yield show_in_sushi (path)) return;
             var launcher = new Gtk.FileLauncher (File.new_for_path (path));
             yield launcher.launch (w, null);

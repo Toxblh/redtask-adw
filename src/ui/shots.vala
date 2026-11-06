@@ -8,6 +8,7 @@ namespace Redmine {
      * REDTASK_SHOT_WIDE=N — печать виджетов шире N (min или выделенная ширина): кто распирает окно на телефоне.
      * REDTASK_SHOT_COPY=1 — в каждом тексте задачи «Выделить всё» + Ctrl+C и печать того, что легло в буфер обмена.
      * REDTASK_SHOT_TEXT=файл — вместо окна только этот Textile (таблицы, разметка).
+     * REDTASK_SHOT_SCROLL=px — прокрутка открытой задачи.
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
@@ -55,6 +56,16 @@ namespace Redmine {
             if (sw != null) Timeout.add (delay * 3 / 4, () => {
                 var sb = find_sidebar (w);
                 if (sb != null) { sb.selected = int.parse (sw); sb.activated (int.parse (sw)); }
+                return Source.REMOVE;
+            });
+            // REDTASK_SHOT_SCROLL=px — прокрутить открытую задачу (миниатюры видимых строк, низ страницы)
+            var scroll = Environment.get_variable ("REDTASK_SHOT_SCROLL");
+            if (scroll != null) Timeout.add (delay * 7 / 10, () => {
+                var page = w.visible_issue ();
+                var clamp = page != null ? find_clamp (page) : null;
+                var scr = clamp?.get_ancestor (typeof (Gtk.ScrolledWindow)) as Gtk.ScrolledWindow;
+                if (scr != null) scr.vadjustment.value = double.parse (scroll);
+                debug ("shot: scroll %s page=%s clamp=%s sw=%s upper=%f", scroll, (page != null).to_string (), (clamp != null).to_string (), (scr != null).to_string (), scr != null ? scr.vadjustment.upper : 0);
                 return Source.REMOVE;
             });
             // REDTASK_SHOT_PERSON=id — карточка человека

@@ -707,6 +707,56 @@ namespace Redmine {
             return b;
         }
 
+        /**
+         * GET с Range (spec 4.1): 206 — пришёл кусок; 200 (сервер Range не умеет) — всё тело, если оно не длиннее max,
+         * иначе соединение рвётся сразу (отмена и закрытие потока — libsoup дальше не качает) и null; max = 0 — рвать любое 200.
+         */
+        public async Bytes? get_range (string u, string range, int64 max, out uint status) throws Error {
+            status = 0;
+            var c = new Cancellable ();
+            var msg = new Soup.Message ("GET", own (u));
+            if (msg == null) throw http_error (0, _("Bad address: %s").printf (u));
+            msg.flags |= Soup.MessageFlags.NO_REDIRECT;
+            var h = msg.request_headers;
+            h.replace ("Accept", "*/*");
+            h.replace ("Range", range);
+            if (key_allowed (base_uri, msg.get_uri ())) h.replace ("X-Redmine-API-Key", api_key);
+            InputStream body;
+            try {
+                body = yield session.send_async (msg, Priority.LOW, c);
+            } catch (Error e) {
+                throw http_error (0, e.message);
+            }
+            status = msg.status_code;
+            var ct = msg.response_headers.get_content_type (null);
+            bool waf = waf_challenge ("*/*", status, ct, msg.response_headers.get_one ("X-Request-Id"));
+            bool whole = status == 200 && !waf;
+            if ((status != 206 && !whole) || (whole && (max <= 0 || msg.response_headers.get_content_length () > max))) {
+                c.cancel ();
+                try { body.close (); } catch (Error e) {}
+                if (waf || status < 200 || status >= 300) throw http_error ((int) status, "range: HTTP %u".printf (status));
+                return null;
+            }
+            var out = new MemoryOutputStream.resizable ();
+            var buf = new uint8[65536];
+            int64 total = 0;
+            while (true) {
+                var n = yield body.read_async (buf, Priority.LOW, c);
+                if (n <= 0) break;
+                total += n;
+                // длины в заголовке не было, а тело всё идёт — рвём так же
+                if (whole && total > max) {
+                    c.cancel ();
+                    try { body.close (); } catch (Error e) {}
+                    return null;
+                }
+                out.write_all (buf[0:n], null);
+            }
+            yield body.close_async ();
+            out.close ();
+            return out.steal_as_bytes ();
+        }
+
         /** Миниатюра вложения; null — определённое «нет» (не картинка, нет прав). */
         public async Bytes? thumbnail (int attachment_id, int size = 200, Cancellable? c = null) throws Error {
             var r = yield raw ("GET", url ("attachments/thumbnail/%d/%d".printf (attachment_id, size)), "image/*", null, null, false, c);
