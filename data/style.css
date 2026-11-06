@@ -88,30 +88,35 @@ textview.rich-flow > text {
   background: none;
 }
 /* Фильтр доски: аватар исполнителя — переключатель, выбранный обведён акцентом; «без исполнителя» — серый кружок. */
-/* Ряд внахлёст: кольцо цвета фона отделяет соседей, выбранный — кольцо акцента; при выборе остальные приглушены. */
-button.avatar-toggle {
+/* Ряд внахлёст: кольцо цвета фона отделяет соседей, выбранный — кольцо акцента. */
+/* Аватары непрозрачные, без приглушения: выбранный отмечен только кольцом акцента. */
+.avatar-stack button.avatar-toggle {
   padding: 0;
-  min-width: 0;
-  min-height: 0;
+  margin: 0;
+  border: none;
+  min-width: 32px;
+  min-height: 32px;
   border-radius: 999px;
-  background: none;
+  background-color: var(--window-bg-color);
   box-shadow: 0 0 0 2px var(--window-bg-color);
 }
-button.avatar-toggle:hover {
-  background: none;
+.avatar-stack button.avatar-toggle:hover,
+.avatar-stack button.avatar-toggle:checked,
+.avatar-stack button.avatar-toggle:checked:hover {
+  background-color: var(--window-bg-color);
+}
+.avatar-stack button.avatar-toggle:hover > avatar {
   filter: brightness(1.08);
 }
-button.avatar-toggle:checked {
-  background: none;
+.avatar-stack button.avatar-toggle:checked {
   box-shadow: 0 0 0 2px var(--accent-bg-color);
 }
-.avatar-stack.picking > button.avatar-toggle:not(:checked) {
-  opacity: 0.45;
-}
-menubutton.avatar-more > button {
+.avatar-stack menubutton.avatar-more > button {
   min-width: 32px;
   min-height: 32px;
   padding: 0;
+  margin: 0;
+  border: none;
   border-radius: 999px;
   background-color: mix(var(--window-bg-color), currentColor, 0.15);
   box-shadow: 0 0 0 2px var(--window-bg-color);
@@ -119,5 +124,5 @@ menubutton.avatar-more > button {
   font-weight: bold;
 }
 avatar.avatar-none {
-  background-color: alpha(currentColor, 0.15);
+  background-color: mix(var(--window-bg-color), currentColor, 0.15);
 }

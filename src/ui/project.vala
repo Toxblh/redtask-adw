@@ -397,6 +397,9 @@ namespace Redmine {
         private Gtk.Box avatars;
         private GenericSet<string> picked = new GenericSet<string> (str_hash, str_equal);
         private const int MAX_AVATARS = 7;
+        private const double AVATAR_STEP = 22; // 32 px со смещением 10 — заход на треть, как в Jira
+        private Gtk.Fixed? stack = null;
+        private Gtk.Widget? more_btn = null;
         private Gtk.Stack results;
         private Gtk.ListBox list;
         private Gtk.Box board;
@@ -519,6 +522,11 @@ namespace Redmine {
          */
         private void fill_assignees () {
             clear_box (avatars);
+            // Gtk.Fixed: отрицательный margin в GTK растягивает кнопку, а не сдвигает её — шаг задаём координатами
+            stack = new Gtk.Fixed () { overflow = Gtk.Overflow.VISIBLE, margin_top = 3, margin_bottom = 3, margin_start = 3, margin_end = 3 };
+            more_btn = null;
+            avatars.append (stack);
+            double x = 0;
             var me = App.get ().session.user_id;
             string my_name = "";
             foreach (var i in all) if (i.assigned_to != null && i.assigned_to.id == me) my_name = i.assigned_to.name;
@@ -537,13 +545,12 @@ namespace Redmine {
                 if (n < MAX_AVATARS || opts.length == MAX_AVATARS + 1) {
                     var av = assignee_avatar (key, me, label, 32);
                     var t = new Gtk.ToggleButton () { child = av, tooltip_text = tip, active = picked.contains (key) };
-                    t.add_css_class ("flat");
-                    t.add_css_class ("circular");
                     t.add_css_class ("avatar-toggle");
-                    if (n > 0) t.margin_start = -10;
                     t.update_property (Gtk.AccessibleProperty.LABEL, tip, -1);
                     t.toggled.connect (() => pick (key, t.active));
-                    avatars.append (t);
+                    t.set_data<int> ("slot", n);
+                    stack.put (t, x, 0);
+                    x += AVATAR_STEP;
                     continue;
                 }
                 if (more == null) more = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { margin_top = 6, margin_bottom = 6, margin_start = 6, margin_end = 6 };
@@ -558,16 +565,22 @@ namespace Redmine {
             if (more != null) {
                 var extra = opts.length - MAX_AVATARS;
                 // «+N» — такой же кружок внахлёст; подпись своим ярлыком: у label MenuButton рисует стрелку
-                var mb = new Gtk.MenuButton () { child = new Gtk.Label ("+%d".printf (extra)), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more }, margin_start = -10 };
+                var mb = new Gtk.MenuButton () { child = new Gtk.Label ("+%d".printf (extra)), tooltip_text = _("More assignees"), popover = new Gtk.Popover () { child = more } };
                 mb.add_css_class ("avatar-more");
-                avatars.append (mb);
+                stack.put (mb, x, 0);
+                more_btn = mb;
             }
             mark_picking ();
         }
 
-        /** Что-то выбрано — остальные аватары приглушены. */
+        /** Выбранные — поверх соседей (Gtk.Fixed рисует детей по порядку), чтобы кольцо акцента было видно целиком; «+N» — последним. */
         private void mark_picking () {
-            if (picked.length > 0) avatars.add_css_class ("picking"); else avatars.remove_css_class ("picking");
+            if (stack == null) return;
+            var toggles = new GenericArray<Gtk.ToggleButton> ();
+            for (var w = stack.get_first_child (); w != null; w = w.get_next_sibling ()) if (w is Gtk.ToggleButton) toggles.add ((Gtk.ToggleButton) w);
+            toggles.sort ((a, b) => a.get_data<int> ("slot") - b.get_data<int> ("slot"));
+            foreach (var t in toggles) if (!t.active) t.insert_before (stack, more_btn);
+            foreach (var t in toggles) if (t.active) t.insert_before (stack, more_btn);
         }
 
         private static Adw.Avatar assignee_avatar (string key, int me, string label, int size) {
