@@ -405,7 +405,7 @@ namespace Redmine {
         private Gtk.Box avatars;
         private GenericSet<string> picked = new GenericSet<string> (str_hash, str_equal);
         private const int MAX_AVATARS = 7;
-        private const double AVATAR_STEP = 22; // 32 px со смещением 10 — заход на треть, как в Jira
+        private const double AVATAR_STEP = 26; // шаг 26 при аватаре 32 — как на Android и iOS (spec 3.2)
         private Gtk.Fixed? stack = null;
         private Gtk.Stack results;
         private Gtk.ListBox list;
