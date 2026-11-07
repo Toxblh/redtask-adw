@@ -649,6 +649,9 @@ msgstr "Добавить на сайте"
 msgid "Open on Website"
 msgstr "Открыть на сайте"
 
+msgid "_Favorite"
+msgstr "В _избранном"
+
 msgid "As Board"
 msgstr "Доской"
 

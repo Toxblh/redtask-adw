@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Окно: разделы (сайдбар) → список → задача.
-  Широко: три колонки. Средне (≤ 860sp): сайдбар разделов выезжает поверх по кнопке.
-  Узко (≤ 500sp): список и задача — навигационный стек, разделы — AdwViewSwitcherBar снизу.
+  Широко: три колонки. Средне (≤ 1040sp): сайдбар разделов выезжает поверх по кнопке.
+  Узко (≤ 760sp): список и задача — навигационный стек, разделы — AdwViewSwitcherBar снизу.
+  Пороги — по ширинам колонок: список не уже 360 (сегменты «Открытые / Закрытые / Все» без «…»), задача не уже ~400
+  (кнопки «Комментарий · статус · время» внизу и шапка без обрезки); сайдбар 200–260.
 -->
 <interface>
   <requires lib="gtk" version="4.0"/>
@@ -39,14 +41,14 @@
     <property name="title" translatable="yes">RedTask</property>
     <child>
       <object class="AdwBreakpoint">
-        <condition>max-width: 860sp</condition>
+        <condition>max-width: 1040sp</condition>
         <setter object="outer" property="collapsed">True</setter>
         <setter object="sidebar_button" property="visible">True</setter>
       </object>
     </child>
     <child>
       <object class="AdwBreakpoint">
-        <condition>max-width: 500sp</condition>
+        <condition>max-width: 760sp</condition>
         <setter object="outer" property="collapsed">True</setter>
         <setter object="outer" property="enable-show-gesture">False</setter>
         <setter object="inner" property="collapsed">True</setter>
@@ -115,7 +117,7 @@
                     </property>
                     <property name="content">
                       <object class="AdwNavigationSplitView" id="inner">
-                        <property name="min-sidebar-width">300</property>
+                        <property name="min-sidebar-width">360</property>
                         <property name="max-sidebar-width">420</property>
                         <property name="sidebar-width-fraction">0.38</property>
                         <property name="sidebar">

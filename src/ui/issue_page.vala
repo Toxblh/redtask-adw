@@ -112,7 +112,7 @@ namespace Redmine {
             });
             hb.pack_end (star);
 
-            body = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 72 }; // снизу — место под кнопку «Обновить»
+            body = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 24 };
             // без прокрутки к фокусу: перерисовка (права, имена) не должна уводить экран к кнопке внизу
             var vp = new Gtk.Viewport (null, null) { scroll_to_focus = false, child = new Adw.Clamp () { child = body, maximum_size = 860, tightening_threshold = 600 } };
             sw = new Gtk.ScrolledWindow () { child = vp, hscrollbar_policy = Gtk.PolicyType.NEVER, vexpand = true };
@@ -137,7 +137,12 @@ namespace Redmine {
             tv.add_top_bar (hb);
             tv.content = state;
             tv.add_bottom_bar (bottom);
-            child = tv;
+            // телефон: звезда уходит в меню («Избранное» там есть всегда) — иначе от «#номера» в шапке остаётся «#24…»
+            var bin = new Adw.BreakpointBin () { child = tv, width_request = 300, height_request = 200 };
+            var bp = new Adw.Breakpoint (Adw.BreakpointCondition.parse ("max-width: 440sp"));
+            bp.add_setter (star, "visible", false);
+            bin.add_breakpoint (bp);
+            child = bin;
 
             setup_actions ();
             favs.changed.connect (() => star.active = favs.has (issue_id));
@@ -311,6 +316,7 @@ namespace Redmine {
 
         private void setup_actions () {
             group = new SimpleActionGroup ();
+            group.add_action (new PropertyAction ("favorite", star, "active"));
             act ("copy-number").activate.connect (() => { copy_text (this, "#%d".printf (issue_id)); win ()?.toast (_("Issue number copied")); });
             act ("copy-link").activate.connect (() => { copy_text (this, link ()); win ()?.toast (_("Link copied")); });
             act ("share").activate.connect (() => {
@@ -415,6 +421,7 @@ namespace Redmine {
             share.append (_("Open in _Browser"), "issue.open-browser");
             m.append_section (null, share);
             var other = new Menu ();
+            other.append (_("_Favorite"), "issue.favorite");
             other.append (watching () ? _("_Stop Watching") : _("_Watch"), "issue.watch");
             other.append (Prefs.get_default ().muted ("muted-issues").contains (issue_id) ? _("_Notify About This Issue") : _("_Mute Notifications"), "issue.mute");
             m.append_section (null, other);
