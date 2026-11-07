@@ -637,7 +637,8 @@ namespace Redmine {
 
     /** Подпись-заголовок раздела внутри страницы. */
     public Gtk.Label heading (string text) {
-        var l = new Gtk.Label (text) { xalign = 0, margin_top = 18, margin_bottom = 6 };
+        // переносится: длинное название (роль, лист согласования) не должно распирать колонку на телефоне
+        var l = new Gtk.Label (text) { xalign = 0, margin_top = 18, margin_bottom = 6, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
         l.add_css_class ("heading");
         return l;
     }

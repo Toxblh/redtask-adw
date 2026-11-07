@@ -45,6 +45,10 @@ namespace Redmine {
             ok_btn.add_css_class ("suggested-action");
             ok_btn.clicked.connect (() => { if (!busy) submit.begin (); });
             hb.pack_end (ok_btn);
+            // телефон: между «Отмена» и «Отправить» заголовку нет места — от него оставалось «Добавить к…»
+            var bp = new Adw.Breakpoint (Adw.BreakpointCondition.parse ("max-width: 440sp"));
+            bp.add_setter (hb, "show-title", false);
+            add_breakpoint (bp);
             content_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 12) { margin_start = 12, margin_end = 12, margin_top = 12, margin_bottom = 12 };
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);

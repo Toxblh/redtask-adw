@@ -472,7 +472,12 @@ namespace Redmine {
             var tv = new Adw.ToolbarView ();
             tv.add_top_bar (hb);
             tv.content = state;
-            child = tv;
+            // телефон: имя вехи крупно в шапке страницы — в заголовке от него оставалось «#230…»
+            var bin = new Adw.BreakpointBin () { child = tv, width_request = 300, height_request = 200 };
+            var bp = new Adw.Breakpoint (Adw.BreakpointCondition.parse ("max-width: 440sp"));
+            bp.add_setter (hb, "show-title", false);
+            bin.add_breakpoint (bp);
+            child = bin;
             state.loading ();
             load.begin (false);
         }

@@ -55,6 +55,17 @@
         <setter object="switcher_bar" property="reveal">True</setter>
       </object>
     </child>
+    <child>
+      <!-- телефон: раздел виден в нижней панели, а в шапке между кнопками от названия оставалось «Уведомле…» -->
+      <object class="AdwBreakpoint">
+        <condition>max-width: 440sp</condition>
+        <setter object="outer" property="collapsed">True</setter>
+        <setter object="outer" property="enable-show-gesture">False</setter>
+        <setter object="inner" property="collapsed">True</setter>
+        <setter object="switcher_bar" property="reveal">True</setter>
+        <setter object="section_title" property="visible">False</setter>
+      </object>
+    </child>
     <property name="content">
       <object class="AdwToastOverlay" id="toasts">
         <property name="child">
