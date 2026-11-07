@@ -58,9 +58,8 @@ namespace Redmine {
         public override void startup () {
             base.startup ();
             Gtk.IconTheme.get_for_display (Gdk.Display.get_default ()).add_resource_path ("/ru/toxblh/RedTask/icons");
-            var css = new Gtk.CssProvider ();
-            css.load_from_resource ("/ru/toxblh/RedTask/style.css");
-            Gtk.StyleContext.add_provider_for_display (Gdk.Display.get_default (), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+            // style.css грузит сам Adw.Application (по resource base path) — с @media (prefers-color-scheme: dark) по теме;
+            // свой провайдер тёмную тему не знал и перекрывал тёмные правила светлыми
             Prefs.get_default ().s.changed["run-in-background"].connect (sync_background);
             // фоновый запуск при входе в сеанс (--gapplication-service): activate не придёт, окна нет
             if ((get_flags () & ApplicationFlags.IS_SERVICE) != 0) start_session.begin (false);

@@ -8,6 +8,10 @@ namespace Redmine {
         private Gtk.Box preview_box;
         public GenericArray<Json.Object> attachments = new GenericArray<Json.Object> ();
         public signal void submit ();
+        /** Пишем приватную заметку: поле ввода с янтарным фоном (spec 13). */
+        public bool private_tint {
+            set { if (value) view.add_css_class ("private-input"); else view.remove_css_class ("private-input"); }
+        }
         /** Подсказка @упоминания у каретки (spec 8.1). */
         private MentionSource mentions = new MentionSource ();
         private Gtk.Popover pop;

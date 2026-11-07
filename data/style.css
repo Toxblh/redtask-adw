@@ -51,9 +51,26 @@ button.mention-pill:hover {
   border-radius: 4px;
   background-color: var(--accent-bg-color);
 }
-.journal-private {
-  border-left: 3px solid var(--warning-color);
-  padding-left: 9px;
+/* Приватная заметка (spec 13): янтарь один на платформы — #B26A00 / #FFCA28 текст и полоса, #FFB300 фон. */
+.private-note {
+  background-color: alpha(#FFB300, 0.09);
+  box-shadow: inset 3px 0 #B26A00;
+  border-radius: 12px;
+  padding: 8px 8px 8px 11px;
+}
+.private-pill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: bold;
+  color: #B26A00;
+  background-color: alpha(#FFB300, 0.2);
+}
+textview.private-input > text {
+  background-color: mix(var(--view-bg-color), #FFB300, 0.09);
+}
+@media (prefers-color-scheme: dark) {
+  .private-note { box-shadow: inset 3px 0 #FFCA28; }
+  .private-pill { color: #FFCA28; background-color: alpha(#FFB300, 0.16); }
 }
 .highlight-note {
   background-color: alpha(var(--accent-color), 0.12);

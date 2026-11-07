@@ -115,6 +115,9 @@ namespace Redmine {
 
             var opts = boxed_list ();
             priv = new Adw.SwitchRow () { title = _("Private note") };
+            priv.add_prefix (new Gtk.Image.from_icon_name ("changes-prevent-symbolic"));
+            // включена — поле ввода янтарное, как приватная заметка в ленте (spec 13)
+            priv.notify["active"].connect (() => editor.private_tint = priv.active);
             opts.append (priv);
             content_box.append (opts);
 

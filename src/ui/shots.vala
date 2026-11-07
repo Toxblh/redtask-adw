@@ -12,6 +12,7 @@ namespace Redmine {
      * REDTASK_SHOT_TYPE=текст — набрать в редакторе открытого диалога.
      * REDTASK_SHOT_MORE=1 — выбрать второй аватар исполнителя доски и открыть «+N».
      * REDTASK_SHOT_REFRESH=1 — обновить всё за 150 мс до снимка (спиннеры «Обновить»).
+     * REDTASK_SHOT_PRIVATE=1 — с REDTASK_SHOT_TYPE: включить «Приватная заметка» в диалоге.
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
      */
     namespace Shots {
@@ -98,6 +99,11 @@ namespace Redmine {
             if (type != null) Timeout.add (delay * 85 / 100, () => {
                 var tv = find_textview (w.visible_dialog);
                 if (tv != null) { tv.grab_focus (); tv.buffer.insert_at_cursor (type, -1); }
+                // REDTASK_SHOT_PRIVATE=1 — ещё и включить «Приватная заметка» (ничего не отправляется)
+                if (Environment.get_variable ("REDTASK_SHOT_PRIVATE") != null) {
+                    var sr = find_switch_row (w.visible_dialog);
+                    if (sr != null) sr.active = true;
+                }
                 return Source.REMOVE;
             });
             // REDTASK_SHOT_MORE=1 — открыть «+N» исполнителей на экране вехи (список в .popover.png)
@@ -175,6 +181,16 @@ namespace Redmine {
         private void collect (Gtk.Widget w, GenericArray<Gtk.TextView> res) {
             if (w is FlowView) { res.add ((Gtk.TextView) w); return; }
             for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) collect (c, res);
+        }
+
+        private Adw.SwitchRow? find_switch_row (Gtk.Widget? w) {
+            if (w == null) return null;
+            if (w is Adw.SwitchRow) return (Adw.SwitchRow) w;
+            for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+                var r = find_switch_row (c);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         private Gtk.TextView? find_textview (Gtk.Widget? w) {

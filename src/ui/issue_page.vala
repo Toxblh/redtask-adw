@@ -966,7 +966,7 @@ namespace Redmine {
             return rt;
         }
 
-        private Gtk.Widget header_line (int user_id, string user, string when, string? extra, Gtk.Widget? menu) {
+        private Gtk.Widget header_line (int user_id, string user, string when, string? extra, Gtk.Widget? menu, bool is_private = false) {
             var row = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
             var who = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
             who.append (Avatars.make (user_id, user, 32));
@@ -974,10 +974,23 @@ namespace Redmine {
             var n = new Gtk.Label (user) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
             n.add_css_class ("heading");
             col.append (n);
-            var w = new Gtk.Label (when + (extra != null ? " · " + extra : "")) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
+            var w = new Gtk.Label (when + (extra != null && !is_private ? " · " + extra : "")) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
             w.add_css_class ("dim-label");
             w.add_css_class ("caption");
-            col.append (w);
+            if (!is_private) col.append (w);
+            else {
+                // «🔒 Приватная» сразу после #N (spec 13)
+                var line = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+                line.append (w);
+                line.append (private_pill ());
+                if (extra != null) {
+                    var e = new Gtk.Label (extra) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
+                    e.add_css_class ("dim-label");
+                    e.add_css_class ("caption");
+                    line.append (e);
+                }
+                col.append (line);
+            }
             who.append (col);
             // аватар, имя и дата — одна кнопка на карточку; до меню справа — пусто, мимо не промахнуться
             var b = person_button (user_id, user, who);
@@ -988,13 +1001,24 @@ namespace Redmine {
             return row;
         }
 
+        /** Янтарная пилюля «🔒 Приватная»; диктор читает «Приватная заметка». */
+        private static Gtk.Widget private_pill () {
+            var p = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 3) { valign = Gtk.Align.CENTER };
+            p.append (new Gtk.Image.from_icon_name ("changes-prevent-symbolic") { pixel_size = 12 });
+            p.append (new Gtk.Label (_("Private")));
+            p.css_classes = { "private-pill", "caption" };
+            p.accessible_role = Gtk.AccessibleRole.IMG;
+            p.update_property (Gtk.AccessibleProperty.LABEL, _("Private note"), -1);
+            return p;
+        }
+
         private Gtk.Widget journal_widget (Json.Object j, bool notes, bool details) {
             var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 6);
             var user = Named.from (jobj (j, "user")) ?? new Named (0, _("Someone"));
             var jid = jint (j, "id");
             var is_private = jbool (j, "private_notes");
             var text = jstr (j, "notes");
-            string? extra = is_private ? _("private note") : null;
+            string? extra = null;
             var upd = jstr (j, "updated_on");
             if (upd != "" && upd != jstr (j, "created_on") && notes && text != "") extra = (extra != null ? extra + " · " : "") + _("edited");
             // #N — позиция в issue.journals, как #note-N на сайте
@@ -1041,7 +1065,7 @@ namespace Redmine {
                 mb.menu_model = m;
                 mb.insert_action_group ("j", g);
             }
-            var head = header_line (user.id, user.name, when, extra, mb);
+            var head = header_line (user.id, user.name, when, extra, mb, is_private);
             if (mb != null) {
                 // правый клик и долгое нажатие на шапку — то же меню «⋮»
                 var rc = new Gtk.GestureClick () { button = Gdk.BUTTON_SECONDARY };
@@ -1076,7 +1100,8 @@ namespace Redmine {
                     }
                 }
             }
-            if (is_private) inner.add_css_class ("journal-private");
+            // приватная (spec 13): янтарный фон и полоса слева у всей карточки
+            if (is_private) box.add_css_class ("private-note");
             box.append (inner);
             note_widgets[jid] = box;
             return box;
