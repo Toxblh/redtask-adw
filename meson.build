@@ -1,5 +1,5 @@
 project('redtask', ['c', 'vala'],
-  version: '1.0.1',
+  version: '1.1.0',
   meson_version: '>= 1.0.0',
   license: 'GPL-3.0-or-later',
 )
