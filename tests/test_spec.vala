@@ -276,7 +276,12 @@ void test_people_phones () {
 
 void test_journal_labels () {
     foreach (var c in objs (spec.get_object_member ("journal_labels").get_array_member ("cases"))) {
-        var got = obj_node (journal_detail_labels (c.get_string_member ("html"), objs (c.get_array_member ("journals"))));
+        GenericSet<string>? multiple = null;
+        if (c.has_member ("multiple") && !c.get_member ("multiple").is_null ()) {
+            multiple = new GenericSet<string> (str_hash, str_equal);
+            foreach (var id in ints (c.get_array_member ("multiple"))) multiple.add (id.to_string ());
+        }
+        var got = obj_node (journal_detail_labels (c.get_string_member ("html"), objs (c.get_array_member ("journals")), multiple));
         assert_cmpstr (json_to_string (got), CompareOperator.EQ, json_to_string (c.get_member ("expected")));
     }
 }
