@@ -436,7 +436,7 @@ namespace Redmine {
             hb.pack_end (view);
 
             info = new Gtk.Box (Gtk.Orientation.VERTICAL, 4);
-            status_filter = new Adw.ToggleGroup ();
+            status_filter = new Adw.ToggleGroup () { homogeneous = true };
             status_filter.add (new Adw.Toggle () { name = "open", label = _("Open") });
             status_filter.add (new Adw.Toggle () { name = "closed", label = _("Closed") });
             status_filter.add (new Adw.Toggle () { name = "*", label = _("All") });
