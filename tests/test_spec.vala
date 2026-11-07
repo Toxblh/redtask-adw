@@ -274,6 +274,13 @@ void test_people_phones () {
     }
 }
 
+void test_journal_labels () {
+    foreach (var c in objs (spec.get_object_member ("journal_labels").get_array_member ("cases"))) {
+        var got = obj_node (journal_detail_labels (c.get_string_member ("html"), objs (c.get_array_member ("journals"))));
+        assert_cmpstr (json_to_string (got), CompareOperator.EQ, json_to_string (c.get_member ("expected")));
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -287,7 +294,7 @@ int main (string[] args) {
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
     string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
-        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones" };
+        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -310,5 +317,6 @@ int main (string[] args) {
     Test.add_func ("/spec/custom_tables", test_custom_tables);
     Test.add_func ("/spec/assignee_avatars", test_assignee_avatars);
     Test.add_func ("/spec/people_phones", test_people_phones);
+    Test.add_func ("/spec/journal_labels", test_journal_labels);
     return Test.run ();
 }

@@ -105,6 +105,73 @@ namespace Redmine {
             } catch (Error e) {}
         }
 
+        // ---- кэш в настройках (spec 15): аватары, миниатюры, скачанные вложения, задачи и списки, справочники ----
+
+        public const int KINDS = 5;
+        private const int ANY = 99;
+
+        /** Категория файла (или ключа) кэша; −1 — не кэш: избранное и недавние в поиске не считаем и не стираем. */
+        private static int kind_of (string name) {
+            if (name.has_prefix ("favorite-ids") || name.has_prefix ("recent-search")) return -1;
+            if (name.has_prefix ("avatar-")) return 0;
+            if (name.has_prefix ("thumb-") || name.has_prefix ("nothumb-") || name.has_prefix ("notif-thumb-")) return 1;
+            if (name.has_prefix ("att-")) return 2;
+            if (name.has_prefix ("issue-") || name.has_prefix ("list-") || name.has_prefix ("brief-")) return 3;
+            return 4; // справочники, люди, права, словарь подписей (spec 14)
+        }
+
+        /** Документы, скачанные для открытия (open_attachment), — общий каталог учёток. */
+        private static string open_dir () { return Path.build_filename (Environment.get_user_cache_dir (), "redtask", "open"); }
+
+        /** Сумма размеров файлов категории kind под path (подкаталоги — целиком); del — заодно стереть. */
+        private static int64 walk (string path, int kind, bool del) {
+            int64 sum = 0;
+            try {
+                var d = Dir.open (path);
+                string? name;
+                while ((name = d.read_name ()) != null) {
+                    var p = Path.build_filename (path, name);
+                    if (FileUtils.test (p, FileTest.IS_DIR)) {
+                        sum += walk (p, ANY, del);
+                        if (del) DirUtils.remove (p);
+                        continue;
+                    }
+                    if (kind != ANY && kind_of (name) != kind) continue;
+                    try {
+                        sum += File.new_for_path (p).query_info (FileAttribute.STANDARD_SIZE, FileQueryInfoFlags.NONE).get_size ();
+                    } catch (Error e) {}
+                    if (del) FileUtils.unlink (p);
+                }
+            } catch (Error e) {}
+            return sum;
+        }
+
+        /** Размеры категорий на диске — в потоке. */
+        public async int64[] sizes () {
+            var res = new int64[KINDS];
+            SourceFunc cb = sizes.callback;
+            new Thread<void> ("cache-size", () => {
+                for (int k = 0; k < KINDS; k++) res[k] = walk (dir, k, false);
+                res[2] += walk (open_dir (), ANY, false);
+                Idle.add ((owned) cb);
+            });
+            yield;
+            return res;
+        }
+
+        /** Стереть категорию с диска (в потоке) и из памяти. */
+        public async void clear_kind (int kind) {
+            SourceFunc cb = clear_kind.callback;
+            new Thread<void> ("cache-clear", () => {
+                walk (dir, kind, true);
+                if (kind == 2) walk (open_dir (), ANY, true);
+                Idle.add ((owned) cb);
+            });
+            yield;
+            mem.foreach_remove ((k, v) => kind_of (k) == kind);
+            mem_at.foreach_remove ((k, v) => kind_of (k) == kind);
+        }
+
         /** Выход: всё, что лежит под этой учёткой. */
         public void clear () {
             mem.remove_all ();
@@ -356,6 +423,42 @@ namespace Redmine {
             learn_phones (id, html ?? "");
             bool f;
             return phones_cached (id, out f) ?? new Json.Array ();
+        }
+
+        /**
+         * Словарь подписей значений истории (spec 14): «attr:project_id:5539» → «Продукты». Без срока, до 5000 записей;
+         * порядок членов объекта — порядок обновления, лишние снимаются с начала (самые давно обновлённые).
+         */
+        public string? label (string prop, string name, string value) {
+            var h = cache.load ("labels");
+            var k = "%s:%s:%s".printf (prop, name, value);
+            return h != null && h.get_node_type () == Json.NodeType.OBJECT && h.get_object ().has_member (k) ? jstr (h.get_object (), k) : null;
+        }
+
+        /** Подписи из HTML задачи (journal_detail_labels) — в словарь; пишутся только attr с именем на _id и cf. */
+        public void learn_labels (GenericArray<Json.Object> journals, Json.Object labels) {
+            var h = cache.load ("labels");
+            var o = h != null && h.get_node_type () == Json.NodeType.OBJECT ? h.get_object () : new Json.Object ();
+            foreach (var j in journals) {
+                var id = jint (j, "id").to_string ();
+                if (!labels.has_member (id)) continue;
+                var pairs = labels.get_array_member (id);
+                var details = jarr (j, "details");
+                for (int k = 0; k < details.length && k < pairs.get_length (); k++) {
+                    var prop = jstr (details[k], "property");
+                    var name = jstr (details[k], "name");
+                    if (prop != "cf" && !(prop == "attr" && name.has_suffix ("_id"))) continue;
+                    foreach (var side in new string[] { "old", "new" }) {
+                        var l = jstr (pairs.get_object_element (k), side);
+                        if (l == "") continue;
+                        var key = "%s:%s:%s".printf (prop, name, jstr (details[k], side + "_value"));
+                        o.remove_member (key); // заново — в конец
+                        o.set_string_member (key, l);
+                    }
+                }
+            }
+            while (o.get_size () > 5000) o.remove_member (o.get_members ().data);
+            cache.save ("labels", obj_node (o));
         }
 
         /** /users/:id (логин, регистрация, последний вход): кэш сутки, net — мимо кэша. */

@@ -4,6 +4,8 @@ namespace Redmine {
     public class PreferencesDialog : Adw.PreferencesDialog {
         private Adw.PreferencesGroup muted_group;
         private GenericArray<Gtk.Widget> muted_rows = new GenericArray<Gtk.Widget> ();
+        private Adw.PreferencesGroup cache_group;
+        private Adw.ActionRow[] cache_rows = {};
 
         construct {
             var p = Prefs.get_default ();
@@ -49,6 +51,32 @@ namespace Redmine {
                 links.add (get_sy);
             }
             general.add (links);
+
+            // кэш (spec 15): строки — в порядке DiskCache.kind_of
+            cache_group = new Adw.PreferencesGroup () { title = _("Cache") };
+            string[] kinds = { _("Avatars"), _("Attachment Thumbnails"), _("Downloaded Attachments"), _("Issues and Lists"), _("Reference Data") };
+            for (int k = 0; k < kinds.length; k++) {
+                var kind = k;
+                var r = new Adw.ActionRow () { title = kinds[k] };
+                var b = new Gtk.Button.with_label (_("Clear")) { valign = Gtk.Align.CENTER };
+                b.add_css_class ("flat");
+                b.clicked.connect (() => clear_cache.begin (kind));
+                r.add_suffix (b);
+                cache_group.add (r);
+                cache_rows += r;
+            }
+            var clear_all = new Adw.ButtonRow () { title = _("Clear All") };
+            clear_all.activated.connect (() => clear_cache.begin (-1));
+            cache_group.add (clear_all);
+            general.add (cache_group);
+            update_cache.begin ();
+            // снимок (shots.vala): REDTASK_SHOT_CLEAR=N — через 1,5 с «Очистить» в N-й строке кэша, 5 — «Очистить всё»
+            var shot_clear = Environment.get_variable ("REDTASK_SHOT_CLEAR");
+            if (shot_clear != null) Timeout.add (1500, () => {
+                var n = int.parse (shot_clear);
+                clear_cache.begin (n < 5 ? n : -1);
+                return Source.REMOVE;
+            });
             add (general);
 
             // ---- уведомления ----
@@ -138,6 +166,30 @@ namespace Redmine {
             };
             notif.add (note);
             add (notif);
+        }
+
+        private async void update_cache () {
+            var s = App.get ().session;
+            if (s == null) return;
+            foreach (var r in cache_rows) r.subtitle = "…";
+            cache_group.description = "…";
+            var sz = yield s.cache.sizes ();
+            int64 total = 0;
+            for (int k = 0; k < cache_rows.length; k++) {
+                cache_rows[k].subtitle = human_size (sz[k]);
+                total += sz[k];
+            }
+            cache_group.description = _("Total: %s").printf (human_size (total));
+        }
+
+        /** Стереть категорию (−1 — все); не трогает вход, настройки, избранное, историю уведомлений, недавние и черновики. */
+        private async void clear_cache (int kind) {
+            var s = App.get ().session;
+            if (s == null) return;
+            for (int k = 0; k < DiskCache.KINDS; k++) if (kind < 0 || k == kind) yield s.cache.clear_kind (k);
+            Avatars.forget ();
+            no_thumb = null;
+            yield update_cache ();
         }
 
         private void update_last (Adw.ActionRow r) {

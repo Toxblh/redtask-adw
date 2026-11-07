@@ -225,6 +225,9 @@ namespace Redmine {
             fetch.begin (id);
         }
 
+        /** Кэш стёрли (spec 15): новые аватары — с диска или сервера заново. */
+        public static void forget () { mem?.remove_all (); }
+
         private static void publish (int id, Gdk.Texture? t) {
             mem[id] = t;
             var list = waiting[id];

@@ -674,4 +674,70 @@ namespace Redmine {
         }
         return res;
     }
+
+    // ---- подписи значений в истории (spec 14, набор journal_labels) ----
+
+    /**
+     * Подписи изменений журналов из HTML страницы задачи: id журнала (строкой) → [{old, new}] по details.
+     * <li> из <ul class="journal-details"> блока change-{id} идут в порядке details; подписи — тексты <i>.
+     * multiple — id полей со многими значениями: их Redmine (details_to_strings) выводит в конце, по полю
+     * одной строкой «добавлены», потом «удалены»; строка из нескольких значений — без подписи.
+     */
+    public Json.Object journal_detail_labels (string html, GenericArray<Json.Object> journals, GenericSet<string>? multiple = null) {
+        var res = new Json.Object ();
+        try {
+            var li = new Regex ("<li[^>]*>(.*?)</li>", RegexCompileFlags.DOTALL);
+            var it = new Regex ("<i>(.*?)</i>", RegexCompileFlags.DOTALL);
+            foreach (var j in journals) {
+                var details = jarr (j, "details");
+                var items = new GenericArray<string> ();
+                var start = html.index_of ("id=\"change-%d\"".printf (jint (j, "id")));
+                if (start >= 0) {
+                    var next = html.index_of ("id=\"change-", start + 1);
+                    var block = next >= 0 ? html.substring (start, next - start) : html.substring (start);
+                    var ul = block.index_of ("<ul class=\"journal-details\"");
+                    var end = ul >= 0 ? block.index_of ("</ul>", ul) : -1;
+                    MatchInfo m;
+                    if (end > 0) for (li.match (block.substring (ul, end - ul), 0, out m); m.matches (); m.next ()) items.add (m.fetch (1));
+                }
+                // какая строка <li> — какому изменению (−1 — строка из нескольких значений)
+                int[] order = {};
+                string[] multi = {};
+                for (int k = 0; k < details.length; k++) {
+                    var name = jstr (details[k], "name");
+                    if (jstr (details[k], "property") != "cf" || multiple == null || !multiple.contains (name)) order += k;
+                    else if (!(name in multi)) multi += name;
+                }
+                foreach (var name in multi) foreach (var side in new string[] { "new_value", "old_value" }) {
+                    int idx = -1, cnt = 0;
+                    for (int k = 0; k < details.length; k++)
+                        if (jstr (details[k], "property") == "cf" && jstr (details[k], "name") == name && jstr (details[k], side) != "") { idx = k; cnt++; }
+                    if (cnt > 0) order += cnt == 1 ? idx : -1;
+                }
+                var olds = new string?[details.length];
+                var news = new string?[details.length];
+                if (items.length == order.length) for (int i = 0; i < order.length; i++) {
+                    var k = order[i];
+                    if (k < 0) continue;
+                    string[] labels = {};
+                    MatchInfo m;
+                    for (it.match (items[i], 0, out m); m.matches (); m.next ()) labels += html_text (m.fetch (1));
+                    var has_old = jstr (details[k], "old_value") != "", has_new = jstr (details[k], "new_value") != "";
+                    if (has_old && has_new && labels.length == 2) { olds[k] = labels[0]; news[k] = labels[1]; }
+                    else if (has_old != has_new && labels.length == 1) { if (has_old) olds[k] = labels[0]; else news[k] = labels[0]; }
+                }
+                var arr = new Json.Array ();
+                for (int k = 0; k < details.length; k++) {
+                    var pair = new Json.Object ();
+                    if (olds[k] != null) pair.set_string_member ("old", olds[k]); else pair.set_null_member ("old");
+                    if (news[k] != null) pair.set_string_member ("new", news[k]); else pair.set_null_member ("new");
+                    arr.add_object_element (pair);
+                }
+                res.set_array_member (jint (j, "id").to_string (), arr);
+            }
+        } catch (RegexError e) {
+            warning ("journal labels: %s", e.message);
+        }
+        return res;
+    }
 }

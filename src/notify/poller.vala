@@ -247,7 +247,8 @@ namespace Redmine {
             return res;
         }
 
-        private async string? named (string? v, GenericArray<Json.Object>? refs, Named? current) {
+        private async string? named (string? v, GenericArray<Json.Object>? refs, Named? current, string? known) {
+            if (known != null) return known;
             int id = 0;
             if (v == null || !int.try_parse (v, out id)) return v;
             if (refs != null) foreach (var r in refs) if (jint (r, "id") == id) return jstr (r, "name");
@@ -255,7 +256,8 @@ namespace Redmine {
             return "#" + v;
         }
 
-        private async string? user_name (Session s, Issue issue, string? v) {
+        private async string? user_name (Session s, Issue issue, string? v, string? known) {
+            if (known != null) return known;
             int id = 0;
             if (v == null || !int.try_parse (v, out id)) return v;
             var a = issue.assigned_to;
@@ -296,23 +298,25 @@ namespace Redmine {
             var prop = jstr (d, "property");
             var name = jstr (d, "name");
             GenericArray<Json.Object>? refs = null;
+            // подпись из словаря (spec 14) — без запросов, главнее справочников
+            var known = v != null ? s.refs.label (prop, name, v) : null;
             if (prop == "attr") {
                 switch (name) {
                     case "status_id":
                         try { refs = yield s.refs.statuses (); } catch (Error e) {}
-                        return line (_("status"), yield named (v, refs, issue.status));
+                        return line (_("status"), yield named (v, refs, issue.status, known));
                     case "priority_id":
                         try { refs = yield s.refs.priorities (); } catch (Error e) {}
-                        return line (_("priority"), yield named (v, refs, issue.priority));
+                        return line (_("priority"), yield named (v, refs, issue.priority, known));
                     case "tracker_id":
                         try { refs = yield s.refs.trackers (); } catch (Error e) {}
-                        return line (_("tracker"), yield named (v, refs, issue.tracker));
+                        return line (_("tracker"), yield named (v, refs, issue.tracker, known));
                     case "fixed_version_id":
                         try { refs = yield s.refs.versions (issue.project.id); } catch (Error e) {}
-                        return line (_("version"), yield named (v, refs, issue.fixed_version));
-                    case "assigned_to_id": return line (_("assignee"), yield user_name (s, issue, v));
-                    case "category_id": return line (_("category"), yield named (v, null, issue.category));
-                    case "project_id": return line (_("project"), yield named (v, null, issue.project));
+                        return line (_("version"), yield named (v, refs, issue.fixed_version, known));
+                    case "assigned_to_id": return line (_("assignee"), yield user_name (s, issue, v, known));
+                    case "category_id": return line (_("category"), yield named (v, null, issue.category, known));
+                    case "project_id": return line (_("project"), yield named (v, null, issue.project, known));
                     case "parent_id": return line (_("parent issue"), v != null ? "#" + v : null);
                     case "done_ratio": return line (_("progress"), v != null ? v + "%" : null);
                     case "due_date": return line (_("due date"), v);
@@ -321,13 +325,13 @@ namespace Redmine {
                     case "subject": return line (_("subject"), v);
                     case "description": return _("description changed");
                     case "is_private": return v == "1" || v == "true" ? _("issue made private") : _("issue made public");
-                    default: return line (name, v);
+                    default: return line (name, known ?? v);
                 }
             }
             if (prop == "cf") {
                 var label = _("field");
                 foreach (var cf in issue.custom_fields) if (jstr (cf, "id") == name && jstr (cf, "name") != "") label = jstr (cf, "name");
-                return line (label, v);
+                return line (label, known ?? v);
             }
             // у удалённого вложения/связи new_value пуст, имя/номер — в old_value
             if (prop == "attachment") return v != null ? _("file: %s").printf (v) : _("file removed: %s").printf (jstr (d, "old_value"));

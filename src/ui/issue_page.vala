@@ -187,15 +187,16 @@ namespace Redmine {
                 }
             }
             refreshing = issue != null;
-            fresh_tables = null;
+            fresh_html = null;
             load_tables.begin (s, my); // HTML страницы — параллельно, показ задачи не ждёт
             try {
                 var fresh = yield s.api.issue (issue_id);
                 if (my != gen) return;
                 refreshing = false;
-                // листы согласования: свежие, если HTML уже пришёл, иначе прежние из кэша
-                if (fresh_tables != null) fresh.o.set_array_member ("_custom_tables", fresh_tables);
-                else if (issue != null && issue.o.has_member ("_custom_tables")) fresh.o.set_member ("_custom_tables", issue.o.get_member ("_custom_tables").copy ());
+                // листы согласования и подписи истории: свежие, если HTML уже пришёл, иначе прежние из кэша
+                if (fresh_html != null) apply_html (s, fresh, fresh_html);
+                else if (issue != null) foreach (var k in new string[] { "_custom_tables", "_journal_labels" })
+                    if (issue.o.has_member (k)) fresh.o.set_member (k, issue.o.get_member (k).copy ());
                 // подписи полей лежат в кэше вместе с задачей — годны, пока задачу не меняли
                 if (issue != null && issue.o.has_member ("_cf_labels") && jstr (issue.o, "updated_on") == jstr (fresh.o, "updated_on"))
                     fresh.o.set_member ("_cf_labels", issue.o.get_member ("_cf_labels").copy ());
@@ -217,23 +218,32 @@ namespace Redmine {
             if (!issue.o.has_member ("_cf_labels")) load_labels.begin (s, my);
         }
 
-        private Json.Array? fresh_tables = null;
+        private string? fresh_html = null;
 
-        /** Листы согласования (spec 10) из HTML страницы задачи; не пришло — остаётся кэш. */
+        /** HTML страницы задачи: листы согласования (spec 10) и подписи истории (spec 14); не пришло — остаётся кэш. */
         private async void load_tables (Session s, int my) {
-            Json.Array t;
+            string html;
             try {
-                t = custom_tables (yield s.api.issue_html (issue_id));
+                html = yield s.api.issue_html (issue_id);
             } catch (Error e) {
-                debug ("custom tables %d: %s", issue_id, e.message);
+                debug ("issue page %d: %s", issue_id, e.message);
                 return;
             }
             if (my != gen) return;
-            fresh_tables = t;
+            fresh_html = html;
             if (issue == null) return;
-            issue.o.set_array_member ("_custom_tables", t);
+            apply_html (s, issue, html);
             s.cache.save ("issue-%d".printf (issue_id), obj_node (issue.o));
             render ();
+        }
+
+        private static void apply_html (Session s, Issue i, string html) {
+            i.o.set_array_member ("_custom_tables", custom_tables (html));
+            var multiple = new GenericSet<string> (str_hash, str_equal);
+            foreach (var cf in i.custom_fields) if (jbool (cf, "multiple")) multiple.add (jint (cf, "id").to_string ());
+            var labels = journal_detail_labels (html, i.journals, multiple);
+            i.o.set_object_member ("_journal_labels", labels);
+            s.refs.learn_labels (i.journals, labels);
         }
 
         /** Подписи полей-списков («88» → название) из CSV-экспорта; пустой ответ не запоминаем — мог быть сбоем. */
@@ -930,25 +940,34 @@ namespace Redmine {
             return v.char_count () > 120 ? v.substring (0, v.index_of_nth_char (120)) + "…" : v;
         }
 
+        /** Значение изменения (spec 14): подпись из HTML этой задачи → словарь → справочники → сырое. */
+        private string shown (Json.Object d, Json.Object? html, string side) {
+            var v = jstr (d, side + "_value");
+            var h = html != null ? jstr (html, side) : "";
+            if (h != "") return h;
+            var k = v != "" ? App.get ().session?.refs.label (jstr (d, "property"), jstr (d, "name"), v) : null;
+            return k ?? detail_value (jstr (d, "name"), v);
+        }
+
         /** «Статус: было → стало» — оба значения пилюлями (PARITY 0). */
-        private Gtk.Widget status_detail (Json.Object d) {
+        private Gtk.Widget status_detail (Json.Object d, Json.Object? html) {
             var b = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
             var l = new Gtk.Label (_("Status") + ":");
             l.add_css_class ("dim-label");
             b.append (l);
             var ov = jstr (d, "old_value");
             if (ov != "") {
-                b.append (status_pill (detail_value ("status_id", ov), closed_statuses.contains (ov)));
+                b.append (status_pill (shown (d, html, "old"), closed_statuses.contains (ov)));
                 var arrow = new Gtk.Label ("→");
                 arrow.add_css_class ("dim-label");
                 b.append (arrow);
             }
             var nv = jstr (d, "new_value");
-            b.append (status_pill (detail_value ("status_id", nv), closed_statuses.contains (nv)));
+            b.append (status_pill (shown (d, html, "new"), closed_statuses.contains (nv)));
             return b;
         }
 
-        private string detail_text (Json.Object d) {
+        private string detail_text (Json.Object d, Json.Object? html) {
             var prop = jstr (d, "property");
             var name = jstr (d, "name");
             var ov = jstr (d, "old_value");
@@ -961,8 +980,8 @@ namespace Redmine {
                 foreach (var cf in issue.custom_fields) if (jstr (cf, "id") == name) label = jstr (cf, "name");
             }
             if (name == "description") return _("Description changed");
-            if (ov == "") return "%s: %s".printf (label, detail_value (name, nv));
-            return "%s: %s → %s".printf (label, detail_value (name, ov), detail_value (name, nv));
+            if (ov == "") return "%s: %s".printf (label, shown (d, html, "new"));
+            return "%s: %s → %s".printf (label, shown (d, html, "old"), shown (d, html, "new"));
         }
 
         /** Textile описания и длинных настраиваемых полей; quotable — с «Ответить с цитатой» в меню выделения. */
@@ -1084,9 +1103,14 @@ namespace Redmine {
             }
             box.append (head);
             var inner = new Gtk.Box (Gtk.Orientation.VERTICAL, 4) { margin_start = 40 };
+            var jl = jobj (issue.o, "_journal_labels");
+            var pairs = jl != null && jl.has_member (jid.to_string ()) ? jl.get_array_member (jid.to_string ()) : null;
+            int k = 0;
             if (details) foreach (var d in jarr (j, "details")) {
-                if (jstr (d, "property") == "attr" && jstr (d, "name") == "status_id") { inner.append (status_detail (d)); continue; }
-                var l = new Gtk.Label (detail_text (d)) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
+                var html = pairs != null && k < pairs.get_length () ? pairs.get_object_element (k) : null;
+                k++;
+                if (jstr (d, "property") == "attr" && jstr (d, "name") == "status_id") { inner.append (status_detail (d, html)); continue; }
+                var l = new Gtk.Label (detail_text (d, html)) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR };
                 l.add_css_class ("dim-label");
                 inner.append (l);
             }

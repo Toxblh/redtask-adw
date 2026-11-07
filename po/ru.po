@@ -1321,3 +1321,28 @@ msgstr "Избранные"
 
 msgid "RedTask is an independent project and is not affiliated with or endorsed by the Redmine project."
 msgstr "RedTask — независимый проект, не связанный с проектом Redmine и не одобренный им."
+
+msgid "Cache"
+msgstr "Кэш"
+
+msgid "Avatars"
+msgstr "Аватары"
+
+msgid "Attachment Thumbnails"
+msgstr "Миниатюры вложений"
+
+msgid "Downloaded Attachments"
+msgstr "Скачанные вложения"
+
+msgid "Issues and Lists"
+msgstr "Задачи и списки"
+
+msgid "Reference Data"
+msgstr "Справочники"
+
+msgid "Clear All"
+msgstr "Очистить всё"
+
+#, c-format
+msgid "Total: %s"
+msgstr "Всего: %s"
