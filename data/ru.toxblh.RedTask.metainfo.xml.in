@@ -21,15 +21,17 @@
     <name>Anton Palgunov</name>
   </developer>
   <launchable type="desktop-id">ru.toxblh.RedTask.desktop</launchable>
-  <url type="homepage">https://altlinux.space/toxblh/redmine-adw</url>
+  <url type="homepage">https://github.com/Toxblh/redtask-adw</url>
+  <url type="bugtracker">https://github.com/Toxblh/redtask-adw/issues</url>
+  <url type="vcs-browser">https://github.com/Toxblh/redtask-adw</url>
   <screenshots>
     <screenshot type="default">
       <caption>Issue list and issue view</caption>
-      <image>https://altlinux.space/toxblh/redmine-adw/raw/branch/master/docs/screenshots/wide-light.png</image>
+      <image>https://raw.githubusercontent.com/Toxblh/redtask-adw/v1.1.1/docs/screenshots/wide-light.png</image>
     </screenshot>
     <screenshot>
       <caption>Mobile layout</caption>
-      <image>https://altlinux.space/toxblh/redmine-adw/raw/branch/master/docs/screenshots/narrow-light.png</image>
+      <image>https://raw.githubusercontent.com/Toxblh/redtask-adw/v1.1.1/docs/screenshots/narrow-light.png</image>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>
@@ -46,6 +48,7 @@
     <color type="primary" scheme_preference="dark">#a51d2d</color>
   </branding>
   <releases>
+    <release version="1.1.1" date="2026-11-08"/>
     <release version="1.1.0" date="2026-11-07"/>
     <release version="1.0.1" date="2026-10-23"/>
     <release version="0.1.0" date="2026-10-22"/>
