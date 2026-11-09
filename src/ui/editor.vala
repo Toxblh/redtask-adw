@@ -8,6 +8,13 @@ namespace Redmine {
         private Gtk.Box preview_box;
         public GenericArray<Json.Object> attachments = new GenericArray<Json.Object> ();
         public signal void submit ();
+        /** Файлы, брошенные в текст: ссылки на них уже вставлены в точку броска — их надо прикрепить. */
+        public signal void files_dropped (GenericArray<File> files);
+        /** Бросать файлы в текст можно, только если диалог их прикрепит. */
+        public bool accept_files = false;
+        private Gtk.Label drop_label;
+        /** Над окном тащат файлы: подсказка в поле, куда встанет ссылка. */
+        public bool drop_hint { set { drop_label.visible = value && accept_files; } }
         /** Пишем приватную заметку: поле ввода с янтарным фоном (spec 13). */
         public bool private_tint {
             set { if (value) view.add_css_class ("private-input"); else view.remove_css_class ("private-input"); }
@@ -59,11 +66,30 @@ namespace Redmine {
             view.update_property (Gtk.AccessibleProperty.LABEL, _("Text"), -1);
             var sw = new Gtk.ScrolledWindow () { child = view, min_content_height = min_height, vexpand = true };
             sw.add_css_class ("card");
+            var drop = new Gtk.DropTarget (typeof (Gdk.FileList), Gdk.DragAction.COPY);
+            drop.enter.connect ((x, y) => { if (!accept_files) return 0; view.grab_focus (); place_at (x, y); return Gdk.DragAction.COPY; });
+            drop.motion.connect ((x, y) => { if (!accept_files) return 0; place_at (x, y); return Gdk.DragAction.COPY; });
+            drop.drop.connect ((v, x, y) => {
+                var fs = new GenericArray<File> ();
+                foreach (var f in ((Gdk.FileList) v).get_files ()) fs.add (f);
+                if (!accept_files || fs.length == 0) return false;
+                place_at (x, y);
+                string[] refs = {};
+                foreach (var f in fs) refs += attachment_ref (f.get_basename ());
+                insert (string.joinv (" ", refs));
+                files_dropped (fs);
+                return true;
+            });
+            view.add_controller (drop);
+            drop_label = new Gtk.Label (_("Drop into the text to attach and link here")) { valign = Gtk.Align.END, margin_bottom = 8, visible = false, can_target = false };
+            drop_label.add_css_class ("drop-hint");
+            var text_box = new Gtk.Overlay () { child = sw };
+            text_box.add_overlay (drop_label);
             preview_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) { margin_start = 8, margin_end = 8, margin_top = 8, margin_bottom = 8 };
             var psw = new Gtk.ScrolledWindow () { child = preview_box, min_content_height = min_height, vexpand = true };
             psw.add_css_class ("card");
             stack = new Gtk.Stack () { vexpand = true, transition_type = Gtk.StackTransitionType.CROSSFADE };
-            stack.add_named (sw, "edit");
+            stack.add_named (text_box, "edit");
             stack.add_named (psw, "preview");
             append (stack);
             preview_btn.toggled.connect (() => {
@@ -101,6 +127,15 @@ namespace Redmine {
             view.buffer.notify["cursor-position"].connect (on_cursor);
             view.buffer.changed.connect (on_cursor);
             mentions.results.connect (show_candidates);
+        }
+
+        /** Каретка — под указателем: туда встанет ссылка на брошенный файл. */
+        private void place_at (double x, double y) {
+            int bx, by;
+            view.window_to_buffer_coords (Gtk.TextWindowType.WIDGET, (int) x, (int) y, out bx, out by);
+            Gtk.TextIter it;
+            view.get_iter_at_location (out it, bx, by);
+            view.buffer.place_cursor (it);
         }
 
         public override void dispose () {

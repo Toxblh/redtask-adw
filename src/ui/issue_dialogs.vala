@@ -81,6 +81,59 @@ namespace Redmine {
         return l;
     }
 
+    /**
+     * Прикрепляемые файлы: «Прикрепить файлы…» и бросок из файлового менеджера. Брошенный на диалог мимо текста —
+     * только прикрепляется; в текст редактора — ещё и ссылка в точке броска (TextileEditor.files_dropped).
+     */
+    public class AttachList : Object {
+        public Gtk.ListBox list = boxed_list ();
+        public GenericArray<File> files = new GenericArray<File> ();
+        private Adw.ButtonRow add_row;
+        private TextileEditor? editor;
+
+        public AttachList (Gtk.Widget zone, TextileEditor? editor) {
+            this.editor = editor;
+            add_row = new Adw.ButtonRow () { title = _("Attach Files…"), start_icon_name = "mail-attachment-symbolic" };
+            add_row.activated.connect (() => pick.begin ());
+            list.append (add_row);
+            var drop = new Gtk.DropTarget (typeof (Gdk.FileList), Gdk.DragAction.COPY);
+            drop.drop.connect ((v) => { foreach (var f in ((Gdk.FileList) v).get_files ()) add_file (f); return true; });
+            zone.add_controller (drop);
+            var motion = new Gtk.DropControllerMotion ();
+            motion.enter.connect (() => dragging (motion.drop.formats.contain_gtype (typeof (Gdk.FileList))));
+            motion.leave.connect (() => dragging (false));
+            zone.add_controller (motion);
+            if (editor != null) {
+                editor.accept_files = true;
+                editor.files_dropped.connect ((fs) => { foreach (var f in fs) add_file (f); });
+            }
+        }
+
+        private void dragging (bool on) {
+            add_row.title = on ? _("Drop here to attach only") : _("Attach Files…");
+            if (on) list.add_css_class ("drop-zone"); else list.remove_css_class ("drop-zone");
+            if (editor != null) editor.drop_hint = on;
+        }
+
+        private async void pick () {
+            try {
+                var fs = yield new Gtk.FileDialog () { title = _("Attach Files") }.open_multiple (list.get_root () as Gtk.Window, null);
+                for (uint i = 0; i < fs.get_n_items (); i++) add_file ((File) fs.get_item (i));
+            } catch (Error e) {}
+        }
+
+        public void add_file (File f) {
+            foreach (var g in files) if (g.equal (f)) return;
+            files.add (f);
+            var r = new Adw.ActionRow () { title = Markup.escape_text (f.get_basename ()) };
+            var rm = new Gtk.Button.from_icon_name ("list-remove-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Remove %s").printf (f.get_basename ()) };
+            rm.add_css_class ("flat");
+            rm.clicked.connect (() => { files.remove (f); list.remove (r); });
+            r.add_suffix (rm);
+            list.append (r);
+        }
+    }
+
     /** Текущая правка/ответ: черновик комментария по задаче переживает закрытие диалога. */
     private HashTable<int, string>? drafts = null;
 
@@ -97,8 +150,8 @@ namespace Redmine {
         private TextileEditor editor;
         private Adw.SwitchRow priv;
         private Gtk.Label warn;
-        private GenericArray<File> files = new GenericArray<File> ();
-        private Gtk.ListBox files_list;
+        private AttachList? files_list;
+        private GenericArray<File> files { owned get { return files_list != null ? files_list.files : new GenericArray<File> (); } }
         private bool sent_ok = false;
 
         public CommentDialog (Issue issue, Perms can, Json.Object? editing, Json.Object? reply_to = null, string? quote = null) {
@@ -144,11 +197,8 @@ namespace Redmine {
                         editor.text = (cur != "" ? cur + "\n\n" : "") + quote;
                     }
                 }
-                files_list = boxed_list ();
-                var add = new Adw.ButtonRow () { title = _("Attach Files…"), start_icon_name = "mail-attachment-symbolic" };
-                add.activated.connect (() => pick.begin ());
-                files_list.append (add);
-                content_box.append (files_list);
+                files_list = new AttachList (this, editor);
+                content_box.append (files_list.list);
             }
             priv.notify["active"].connect (check_private);
             check_private ();
@@ -175,21 +225,6 @@ namespace Redmine {
             ok_btn.sensitive = !(priv.active && st == 0);
         }
 
-        private async void pick () {
-            try {
-                var fs = yield new Gtk.FileDialog () { title = _("Attach Files") }.open_multiple (get_root () as Gtk.Window, null);
-                for (uint i = 0; i < fs.get_n_items (); i++) {
-                    var f = (File) fs.get_item (i);
-                    files.add (f);
-                    var r = new Adw.ActionRow () { title = Markup.escape_text (f.get_basename ()) };
-                    var rm = new Gtk.Button.from_icon_name ("list-remove-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Remove %s").printf (f.get_basename ()) };
-                    rm.add_css_class ("flat");
-                    rm.clicked.connect (() => { files.remove (f); files_list.remove (r); });
-                    r.add_suffix (rm);
-                    files_list.append (r);
-                }
-            } catch (Error e) {}
-        }
 
         protected override async void submit () {
             var s = App.get ().session;
@@ -453,8 +488,8 @@ namespace Redmine {
         private Adw.SwitchRow is_private;
         private Adw.PreferencesGroup cf_group;
         private GenericArray<CfField> cf_fields = new GenericArray<CfField> ();
-        private GenericArray<File> files = new GenericArray<File> ();
-        private Gtk.ListBox files_list;
+        private AttachList? files_list;
+        private GenericArray<File> files { owned get { return files_list != null ? files_list.files : new GenericArray<File> (); } }
         private int project_gen = 0;
 
         public IssueEditDialog.create (int project_id, int parent_id) {
@@ -540,12 +575,9 @@ namespace Redmine {
             content_box.append (cf_group);
 
             if (issue == null) {
-                files_list = boxed_list ();
-                var add = new Adw.ButtonRow () { title = _("Attach Files…"), start_icon_name = "mail-attachment-symbolic" };
-                add.activated.connect (() => pick.begin ());
-                files_list.append (add);
+                files_list = new AttachList (this, description);
                 var fg = new Adw.PreferencesGroup () { title = _("Files") };
-                fg.add (files_list);
+                fg.add (files_list.list);
                 content_box.append (fg);
             }
             project.notify["selected"].connect (() => {
@@ -557,21 +589,6 @@ namespace Redmine {
             focus_widget = subject;
         }
 
-        private async void pick () {
-            try {
-                var fs = yield new Gtk.FileDialog () { title = _("Attach Files") }.open_multiple (get_root () as Gtk.Window, null);
-                for (uint i = 0; i < fs.get_n_items (); i++) {
-                    var f = (File) fs.get_item (i);
-                    files.add (f);
-                    var r = new Adw.ActionRow () { title = Markup.escape_text (f.get_basename ()) };
-                    var rm = new Gtk.Button.from_icon_name ("list-remove-symbolic") { valign = Gtk.Align.CENTER, tooltip_text = _("Remove %s").printf (f.get_basename ()) };
-                    rm.add_css_class ("flat");
-                    rm.clicked.connect (() => { files.remove (f); files_list.remove (r); });
-                    r.add_suffix (rm);
-                    files_list.append (r);
-                }
-            } catch (Error e) {}
-        }
 
         private async void load_projects (int project_id) {
             var s = App.get ().session;

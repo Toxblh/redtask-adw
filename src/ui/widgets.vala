@@ -523,6 +523,11 @@ namespace Redmine {
         return false;
     }
 
+    /** Textile-ссылка на вложение: картинка — встроенная, если имя без пробелов (иначе Textile её не разберёт). */
+    public string attachment_ref (string name) {
+        return is_image_name (name) && !(" " in name) ? "!" + name + "!" : "attachment:\"" + name + "\"";
+    }
+
     /** Как Attachment.latest_attach в Redmine: имя без учёта регистра, из тёзок — самое свежее. */
     public Json.Object? resolve_attachment (string ref_name, GenericArray<Json.Object> atts) {
         var decoded = Uri.unescape_string (ref_name) ?? ref_name;

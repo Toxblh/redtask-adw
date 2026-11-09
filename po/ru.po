@@ -1346,3 +1346,9 @@ msgstr "Очистить всё"
 #, c-format
 msgid "Total: %s"
 msgstr "Всего: %s"
+
+msgid "Drop into the text to attach and link here"
+msgstr "Отпустите в тексте — прикрепить и вставить ссылку сюда"
+
+msgid "Drop here to attach only"
+msgstr "Отпустите здесь — только прикрепить"
