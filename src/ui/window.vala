@@ -12,6 +12,7 @@ namespace Redmine {
         [GtkChild] private unowned Adw.WindowTitle section_title;
         [GtkChild] private unowned Adw.NavigationPage sections_page;
         [GtkChild] private unowned Adw.HeaderBar list_header;
+        [GtkChild] private unowned Adw.StatusPage empty_status;
         private Gtk.Button search_button;
         private RefreshButton list_refresh;
         private Binding? list_busy = null;
@@ -66,7 +67,17 @@ namespace Redmine {
                 if (sec != null) list_busy = sec.bind_property ("refreshing", list_refresh, "busy", BindingFlags.SYNC_CREATE);
                 else list_refresh.busy = false;
             });
+            sections.notify["visible-child"].connect (sync_empty);
+            list_nav.notify["visible-page"].connect (sync_empty);
             if (Environment.get_variable ("REDTASK_SHOT") != null) Shots.schedule (this);
+        }
+
+        /** Пустая колонка задачи: в «Проектах», пока проект не открыт, — «Выберите проект». */
+        private void sync_empty () {
+            bool pick = sections.visible_child_name == "projects" && list_nav.visible_page?.tag == "sections";
+            empty_status.icon_name = pick ? "folder-symbolic" : "ru.toxblh.RedTask-symbolic";
+            empty_status.title = pick ? _("Select a project") : _("No Issue Selected");
+            empty_status.description = pick ? null : _("Choose an issue from the list");
         }
 
         private void sync_narrow () {

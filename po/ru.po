@@ -1364,3 +1364,6 @@ msgstr "Демо"
 
 msgid "Demo mode: made-up data on this device only, nothing is sent anywhere. Changes are lost when the app restarts. Sign out to return to the sign-in screen."
 msgstr "Демо-режим: выдуманные данные только на этом устройстве, ничего никуда не отправляется. Изменения пропадут при перезапуске. «Выйти» вернёт на экран входа."
+
+msgid "Select a project"
+msgstr "Выберите проект"

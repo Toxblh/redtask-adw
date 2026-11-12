@@ -202,7 +202,7 @@
                                           </object>
                                         </child>
                                         <property name="content">
-                                          <object class="AdwStatusPage">
+                                          <object class="AdwStatusPage" id="empty_status">
                                             <property name="icon-name">ru.toxblh.RedTask-symbolic</property>
                                             <property name="title" translatable="yes">No Issue Selected</property>
                                             <property name="description" translatable="yes">Choose an issue from the list</property>
