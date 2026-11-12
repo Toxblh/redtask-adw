@@ -1376,3 +1376,204 @@ msgstr "%s теперь наблюдает за задачей"
 
 msgid "The server does not allow changing watchers from the app"
 msgstr "Сервер не разрешает менять наблюдателей из приложения"
+
+msgid "Saved on the server"
+msgstr "Сохранено на сервере"
+
+msgid "Queries"
+msgstr "Запросы"
+
+msgid "All Queries"
+msgstr "Все запросы"
+
+msgid "New Filter"
+msgstr "Новый фильтр"
+
+msgid "Favorite Queries"
+msgstr "Избранные запросы"
+
+msgid "Recent Filters"
+msgstr "Недавние фильтры"
+
+msgid "Mine"
+msgstr "Мои"
+
+msgid "No saved queries yet"
+msgstr "Сохранённых запросов пока нет"
+
+msgid "Shared"
+msgstr "Общие"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Saving to the server…"
+msgstr "Сохранение на сервер…"
+
+msgid "Only on this device"
+msgstr "Только на устройстве"
+
+msgid "Save on Server"
+msgstr "Сохранить на сервере"
+
+msgid "Edit"
+msgstr "Изменить"
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "Not Deleted on the Server"
+msgstr "На сервере не удалён"
+
+msgid "Delete only on this device?"
+msgstr "Удалить только на устройстве?"
+
+msgid "_Delete on Device"
+msgstr "_Удалить на устройстве"
+
+msgid "Deleted query"
+msgstr "Удалённый запрос"
+
+msgid "Drag to reorder"
+msgstr "Перетащите, чтобы изменить порядок"
+
+msgid "Default"
+msgstr "По умолчанию"
+
+msgid "Created"
+msgstr "Создана"
+
+msgid "Number"
+msgstr "Номер"
+
+msgid "Filter"
+msgstr "Фильтр"
+
+msgid "Conditions"
+msgstr "Условия"
+
+msgid "Add Condition"
+msgstr "Условие"
+
+msgid "Sort"
+msgstr "Сортировка"
+
+msgid "Sort by"
+msgstr "Сортировать по"
+
+msgid "Descending"
+msgstr "По убыванию"
+
+msgid "_Save…"
+msgstr "_Сохранить…"
+
+msgid "_Apply"
+msgstr "_Применить"
+
+msgid "Loading filters…"
+msgstr "Загрузка фильтров…"
+
+msgid "Could not load filters: %s"
+msgstr "Не удалось загрузить фильтры: %s"
+
+msgid "Remove Condition"
+msgstr "Убрать условие"
+
+msgid "Condition"
+msgstr "Условие"
+
+msgid "Find a field"
+msgstr "Найти поле"
+
+msgid "Operator"
+msgstr "Оператор"
+
+msgid "me"
+msgstr "я"
+
+msgid "Add Person…"
+msgstr "Добавить человека…"
+
+msgid "Add Person"
+msgstr "Добавить человека"
+
+msgid "Find a value"
+msgstr "Найти значение"
+
+msgid "Days"
+msgstr "Дней"
+
+msgid "From"
+msgstr "От"
+
+msgid "To"
+msgstr "До"
+
+msgid "Value"
+msgstr "Значение"
+
+msgid "Choose a value"
+msgstr "Выберите значение"
+
+msgid "Save Query"
+msgstr "Сохранить запрос"
+
+msgid "Name"
+msgstr "Название"
+
+msgid "Visible to"
+msgstr "Видимость"
+
+msgid "Only me"
+msgstr "Только мне"
+
+msgid "All users"
+msgstr "Всем"
+
+msgid "These roles"
+msgstr "Ролям"
+
+msgid "For all projects"
+msgstr "Для всех проектов"
+
+msgid "Could not load roles: %s"
+msgstr "Не удалось загрузить роли: %s"
+
+msgid "Enter a name"
+msgstr "Введите название"
+
+msgid "Choose at least one role"
+msgstr "Выберите хотя бы одну роль"
+
+msgid "Saved on this device"
+msgstr "Сохранено на устройстве"
+
+msgid "All issues"
+msgstr "Все задачи"
+
+msgid "Deleted on the website"
+msgstr "Удалён на сайте"
+
+msgid "Sign in through the website"
+msgstr "Войдите через сайт"
+
+msgid "No connection"
+msgstr "Нет связи"
+
+msgid "Saved only on this device: %s"
+msgstr "Сохранено только на устройстве: %s"
+
+msgid "Saved Queries"
+msgstr "Запросы"
+
+msgid "Queries and Filters"
+msgstr "Запросы и фильтры"
+
+msgid "is"
+msgstr "соответствует"
+
+msgid "Saved _Queries"
+msgstr "_Запросы"
+
+msgid "The query is kept on this device and sent to the server through the website session."
+msgstr "Запрос хранится на устройстве и отправляется на сервер через вход на сайте."

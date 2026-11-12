@@ -312,6 +312,78 @@ void test_demo_server () {
     }
 }
 
+void assert_pairs (Query got, Json.Array want) {
+    assert_cmpint (got.keys.length, CompareOperator.EQ, (int) want.get_length ());
+    for (int k = 0; k < got.keys.length; k++) {
+        var w = want.get_array_element (k);
+        assert_cmpstr (got.keys[k], CompareOperator.EQ, w.get_string_element (0));
+        assert_cmpstr (got.vals[k], CompareOperator.EQ, w.get_string_element (1));
+    }
+}
+
+void test_filter_catalog () {
+    var v = spec.get_object_member ("filter_catalog");
+    var got = filter_catalog (v.get_string_member ("html"));
+    var want = objs (v.get_array_member ("expected"));
+    assert_cmpint (got.length, CompareOperator.EQ, want.length);
+    for (int k = 0; k < want.length; k++) {
+        var g = obj_node (got[k]);
+        var w = new Json.Node (Json.NodeType.OBJECT);
+        w.set_object (want[k]);
+        if (!g.equal (w)) error ("filter_catalog %d: %s", k, json_to_string (g));
+    }
+}
+
+void test_filter_params () {
+    foreach (var c in objs (spec.get_object_member ("filter_params").get_array_member ("cases")))
+        assert_pairs (filter_params (c.get_array_member ("filters"), c.get_array_member ("sort")), c.get_array_member ("expected"));
+}
+
+void test_query_form () {
+    foreach (var c in objs (spec.get_object_member ("query_form").get_array_member ("cases")))
+        assert_pairs (query_form (c.get_string_member ("name"), c.get_string_member ("description"), (int) c.get_int_member ("visibility"),
+            ints (c.get_array_member ("role_ids")), c.get_boolean_member ("for_all"), c.get_array_member ("filters"), c.get_array_member ("sort")),
+            c.get_array_member ("expected"));
+}
+
+void test_query_saved () {
+    foreach (var n in spec.get_object_member ("query_saved").get_array_member ("cases").get_elements ()) {
+        var a = n.get_array ();
+        var want = a.get_element (1).is_null () ? 0 : (int) a.get_int_element (1);
+        assert_cmpint (query_saved_id (a.get_string_element (0)), CompareOperator.EQ, want);
+    }
+}
+
+string demo_text (DemoResp r) {
+    var copy = new uint8[r.body.get_size () + 1];
+    Memory.copy (copy, r.body.get_data (), r.body.get_size ());
+    return (string) copy;
+}
+
+/** Демо (spec 17): каталог со страницы задач, веб-форма запроса → 302 с query_id → запуск → удаление. */
+void test_demo_queries () {
+    DemoServer.reset (false);
+    var base_url = DemoServer.BASE;
+    assert_cmpint (filter_catalog (demo_text (DemoServer.handle ("GET", base_url + "/projects/1/issues", null))).length, CompareOperator.GT, 5);
+    var token = csrf_token (demo_text (DemoServer.handle ("GET", base_url + "/projects/1/queries/new", null)));
+    assert_nonnull (token);
+    var fa = json_parse ("[{\"field\":\"tracker_id\",\"op\":\"=\",\"values\":[\"1\"]}]").get_array ();
+    var form = new Query ().add ("authenticity_token", token);
+    var f = query_form ("Bugs", "", 0, {}, false, fa, new Json.Array ());
+    for (int k = 0; k < f.keys.length; k++) form.add (f.keys[k], f.vals[k]);
+    var r = DemoServer.handle ("POST", base_url + "/projects/1/queries", new Bytes (form.encode ().data));
+    assert_cmpuint (r.code, CompareOperator.EQ, 302);
+    var id = query_saved_id (r.location);
+    assert_cmpint (id, CompareOperator.GT, 0);
+    var list = json_parse (demo_text (DemoServer.handle ("GET", base_url + "/issues.json?query_id=%d&status_id=*".printf (id), null))).get_object ();
+    foreach (var i in jarr (list, "issues")) assert_cmpint (jint (jobj (i, "tracker"), "id"), CompareOperator.EQ, 1);
+    assert_cmpint ((int) jarr (list, "issues").length, CompareOperator.GT, 0);
+    var del = new Query ().add ("authenticity_token", token).add ("_method", "delete");
+    assert_cmpuint (DemoServer.handle ("POST", base_url + "/queries/%d".printf (id), new Bytes (del.encode ().data)).code, CompareOperator.EQ, 302);
+    var all = json_parse (demo_text (DemoServer.handle ("GET", base_url + "/queries.json", null))).get_object ();
+    foreach (var q in jarr (all, "queries")) assert_cmpint (jint (q, "id"), CompareOperator.NE, id);
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -324,7 +396,7 @@ int main (string[] args) {
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
-        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels" };
+        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels", "filter_catalog", "filter_params", "query_form", "query_saved" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -348,6 +420,11 @@ int main (string[] args) {
     Test.add_func ("/spec/assignee_avatars", test_assignee_avatars);
     Test.add_func ("/spec/people_phones", test_people_phones);
     Test.add_func ("/spec/journal_labels", test_journal_labels);
+    Test.add_func ("/spec/filter_catalog", test_filter_catalog);
+    Test.add_func ("/spec/filter_params", test_filter_params);
+    Test.add_func ("/spec/query_form", test_query_form);
+    Test.add_func ("/spec/query_saved", test_query_saved);
     Test.add_func ("/spec/demo_server", test_demo_server);
+    Test.add_func ("/spec/demo_queries", test_demo_queries);
     return Test.run ();
 }

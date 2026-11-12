@@ -136,10 +136,11 @@ namespace Redmine {
     }
 
     /** Запрос куками веб-сессии, без ключа API; капчу WAF (200 + HTML без X-Request-Id) повторяем, как Client.raw. */
-    private async Resp web_send (Soup.Session ss, string method, string u, string accept, string? csrf) throws Error {
+    private async Resp web_send (Soup.Session ss, string method, string u, string accept, string? csrf, Bytes? form = null) throws Error {
         for (int attempt = 0; ; attempt++) {
             var msg = new Soup.Message (method, u);
             msg.flags |= Soup.MessageFlags.NO_REDIRECT;
+            if (form != null) msg.set_request_body_from_bytes ("application/x-www-form-urlencoded", form);
             msg.request_headers.replace ("Accept", accept);
             if (csrf != null) {
                 msg.request_headers.replace ("X-CSRF-Token", csrf);
@@ -191,6 +192,102 @@ namespace Redmine {
         foreach (var c in jar.all_cookies ()) {
             try { yield cm.add_cookie (c, null); } catch (Error e) {}
         }
+    }
+
+    /** Нет веб-сессии для записи запроса (spec 17.3). Код 401. */
+    public Error no_web_session_query () {
+        return http_error (401, _("Sign in through the website"));
+    }
+
+    /** Сессия libsoup с куками WebKit — как сайт (запись запросов). */
+    private class WebForm {
+        public string server;
+        public bool demo;
+        public Soup.Session? ss = null;
+        public Soup.CookieJar? jar = null;
+
+        public static async WebForm open (string server) {
+            var w = new WebForm () { server = server, demo = DemoServer.is_demo (server) };
+            if (w.demo) return w;
+            w.jar = new Soup.CookieJar ();
+            try {
+                foreach (unowned Soup.Cookie c in yield web_session ().get_cookie_manager ().get_cookies (server + "/", null)) w.jar.add_cookie (c.copy ());
+            } catch (Error e) {
+                debug ("web cookies: %s", e.message); // без кук — ответ «войдите через сайт»
+            }
+            w.ss = new Soup.Session () { timeout = 40, user_agent = WafGate.get_default ().browser_agent ?? new WebKit.Settings ().user_agent };
+            w.ss.add_feature (w.jar);
+            return w;
+        }
+
+        /** Демо — ответ DemoServer, сайт — куками веб-сессии. */
+        public async Resp send (string method, string path, Query? form = null) throws Error {
+            var u = server + path;
+            Bytes? body = form != null ? new Bytes (form.encode ().data) : null;
+            if (!demo) return yield web_send (ss, method, u, "text/html", null, body);
+            var d = DemoServer.handle (method, u, body);
+            var hd = new Soup.MessageHeaders (Soup.MessageHeadersType.RESPONSE);
+            hd.replace ("Content-Type", d.type);
+            if (d.location != null) hd.replace ("Location", d.location);
+            return new Resp () { body = d.body, code = d.code, headers = hd };
+        }
+
+        /** Токен формы со страницы path: нет входа — 401, нет прав — 403. */
+        public async string token (string path) throws Error {
+            var r = yield send ("GET", path);
+            if (r.code == 403 || r.code == 404) throw http_error ((int) r.code, r.code == 404 ? _("Not found") : _("Forbidden"));
+            var t = r.code == 200 ? csrf_token (r.text ()) : null;
+            if (t == null) throw no_web_session_query ();
+            return t;
+        }
+
+        /** Обновлённые сервером куки (сессия Rails) — обратно в WebKit. */
+        public async void keep () {
+            if (jar == null) return;
+            var cm = web_session ().get_cookie_manager ();
+            foreach (var c in jar.all_cookies ()) {
+                try { yield cm.add_cookie (c, null); } catch (Error e) {}
+            }
+        }
+    }
+
+    /**
+     * Запрос на сервер веб-формой сайта (spec 17.3): токен со страницы «новый запрос», POST /projects/{p}/queries
+     * (или /queries; правка — /queries/{id} с _method=patch). Успех — 302 на список с query_id → id.
+     * 200 с #errorExplanation — текст сервера; нет входа на сайте — 401.
+     */
+    public async int web_save_query (string server, string? project, int server_id, Query fields) throws Error {
+        var w = yield WebForm.open (server);
+        var base_path = project != null ? "/projects/" + Uri.escape_string (project, null, false) : "";
+        var form = new Query ().add ("authenticity_token", yield w.token (base_path + "/queries/new"));
+        if (server_id > 0) form.add ("_method", "patch");
+        for (int i = 0; i < fields.keys.length; i++) form.add (fields.keys[i], fields.vals[i]);
+        var r = yield w.send ("POST", server_id > 0 ? "/queries/%d".printf (server_id) : base_path + "/queries", form);
+        if (r.code >= 300 && r.code < 400) {
+            var id = query_saved_id (r.headers.get_one ("Location") ?? "");
+            if (id == 0) throw no_web_session_query (); // на /login
+            yield w.keep ();
+            return id;
+        }
+        if (r.code == 200) {
+            var err = form_error (r.text ());
+            if (err != null) throw http_error (422, err);
+        }
+        if (r.code == 401 || r.code == 422) throw no_web_session_query ();
+        if (r.code == 403 || r.code == 404) throw http_error ((int) r.code, r.code == 404 ? _("Not found") : _("Forbidden"));
+        throw http_error ((int) r.code, "HTTP %u".printf (r.code));
+    }
+
+    /** Удалить запрос на сервере: POST /queries/{id} с _method=delete; успех — 302 не на вход. */
+    public async void web_delete_query (string server, int server_id) throws Error {
+        var w = yield WebForm.open (server);
+        var form = new Query ().add ("authenticity_token", yield w.token ("/queries/%d/edit".printf (server_id))).add ("_method", "delete");
+        var r = yield w.send ("POST", "/queries/%d".printf (server_id), form);
+        var loc = r.headers.get_one ("Location") ?? "";
+        if (r.code >= 300 && r.code < 400 && !loc.contains ("/login")) { yield w.keep (); return; }
+        if (r.code == 403 || r.code == 404) throw http_error ((int) r.code, r.code == 404 ? _("Not found") : _("Forbidden"));
+        if (r.code >= 300 && r.code < 400 || r.code == 401 || r.code == 422) throw no_web_session_query ();
+        throw http_error ((int) r.code, "HTTP %u".printf (r.code));
     }
 
     /**

@@ -112,7 +112,7 @@ namespace Redmine {
 
         /** Категория файла (или ключа) кэша; −1 — не кэш: избранное и недавние в поиске не считаем и не стираем. */
         private static int kind_of (string name) {
-            if (name.has_prefix ("favorite-ids") || name.has_prefix ("recent-search")) return -1;
+            if (name.has_prefix ("favorite-ids") || name.has_prefix ("recent-search") || name.has_prefix ("queries-")) return -1;
             if (name.has_prefix ("avatar-")) return 0;
             if (name.has_prefix ("thumb-") || name.has_prefix ("nothumb-") || name.has_prefix ("notif-thumb-")) return 1;
             if (name.has_prefix ("att-")) return 2;
@@ -231,6 +231,35 @@ namespace Redmine {
             var a = yield api.statuses ();
             cache.save ("statuses", arr_node (a));
             return a;
+        }
+
+        /** Роли сервера — видимость сохраняемого запроса (spec 17.3). */
+        public async GenericArray<Json.Object> roles () throws Error {
+            var h = cache.load ("roles", DAY_MS);
+            if (h != null) return node_arr (h);
+            var a = yield api.roles ();
+            cache.save ("roles", arr_node (a));
+            return a;
+        }
+
+        /** Каталог фильтров проекта (0 — всех задач) из кэша любого возраста: {filters, labels}; fresh — моложе суток (spec 17.1). */
+        public Json.Object? catalog_cached (int pid, out bool fresh) {
+            var key = "filters-%d".printf (pid);
+            fresh = cache.load (key, DAY_MS) != null;
+            var n = cache.load (key);
+            return n != null && n.get_node_type () == Json.NodeType.OBJECT ? n.get_object () : null;
+        }
+
+        /** Каталог фильтров со страницы задач — из сети, в кэш. */
+        public async Json.Object catalog (int pid) throws Error {
+            var html = yield api.issues_page_html (pid);
+            var filters = filter_catalog (html);
+            if (filters.length == 0) throw http_error (200, _("Unexpected response from server"));
+            var o = new Json.Object ();
+            o.set_array_member ("filters", arr_node (filters).get_array ());
+            o.set_object_member ("labels", operator_labels (html));
+            cache.save ("filters-%d".printf (pid), obj_node (o));
+            return o;
         }
 
         public async GenericArray<Json.Object> priorities () throws Error {

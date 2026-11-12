@@ -199,6 +199,7 @@ namespace Redmine {
             p.logout ();
             session = null;
             Favorites.get_default ().attach (null);
+            Queries.get_default ().attach (null);
             withdraw_all ();
             main_window ().show_login ();
         }
@@ -206,6 +207,7 @@ namespace Redmine {
         private void apply_session (Session s) {
             session = s;
             Favorites.get_default ().attach (s);
+            Queries.get_default ().attach (s);
             // в фоновом режиме окна нет — его покажет activate, когда человек откроет приложение
             foreach (var x in get_windows ()) if (x is Window) ((Window) x).show_main ();
             poller.start ();

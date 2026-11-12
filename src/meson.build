@@ -1,6 +1,7 @@
 core_sources = files(
   'util.vala',
   'api/models.vala',
+  'api/filters.vala',
   'textile/textile.vala',
   'notify/rules.vala',
   'server_link.vala',
@@ -15,6 +16,7 @@ app_sources = core_sources + demo_sources + files(
   'store/cache.vala',
   'store/notif_store.vala',
   'store/favorites.vala',
+  'store/queries.vala',
   'notify/poller.vala',
   'ui/window.vala',
   'ui/login.vala',
@@ -23,6 +25,7 @@ app_sources = core_sources + demo_sources + files(
   'ui/person.vala',
   'ui/lists.vala',
   'ui/project.vala',
+  'ui/queries.vala',
   'ui/notifications.vala',
   'ui/issue_page.vala',
   'ui/issue_dialogs.vala',

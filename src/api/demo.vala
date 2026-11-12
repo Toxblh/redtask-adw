@@ -10,6 +10,7 @@ namespace Redmine {
         public uint code;
         public string type;
         public Bytes body;
+        public string? location = null;
         public DemoResp (uint code, string type, Bytes body) { this.code = code; this.type = type; this.body = body; }
     }
 
@@ -113,10 +114,16 @@ namespace Redmine {
         HashTable<int, DemoUpload> files = new HashTable<int, DemoUpload> (direct_hash, direct_equal);
         HashTable<string, DemoUpload> uploads = new HashTable<string, DemoUpload> (str_hash, str_equal);
         int next_id = 2000;
+        /** Сохранённые запросы (spec 17): {id, name, is_public, project_id} и их параметры формы. */
+        GenericArray<Json.Object> queries = new GenericArray<Json.Object> ();
+        HashTable<int, Query> query_params = new HashTable<int, Query> (direct_hash, direct_equal);
+        int next_query = 10;
+        const string CSRF = "demo-csrf-token";
 
         public DemoDB (bool ru) {
             this.ru = ru;
             fill ();
+            seed_queries ();
         }
 
         int new_id () { return ++next_id; }
@@ -335,6 +342,7 @@ namespace Redmine {
                 case "GET issues.json": return list (q);
                 // HTML-страница задачи (веб-форма, избранное) — «нет»
                 case "GET issues":
+                    if (p1 == null) return html (catalog_html ());
                     var i = id != null && json1 ? issue (id) : null;
                     return i != null ? wrap ("issue", full (i)) : not_found ();
                 case "PUT issues":
@@ -476,6 +484,24 @@ namespace Redmine {
                     for (int k = 0; k < found.length && k < lim; k++) res.add (found[k]);
                     return ok ("people", arr (res));
                 // HTML-страница /people/:id (аватар) — «нет»: экраны берут запасной путь (инициалы)
+                case "GET queries.json":
+                    var qa = new Json.Array ();
+                    foreach (var x in page (queries, q)) qa.add_object_element (clone (x));
+                    return ok ("queries", qa, (int) queries.length);
+                case "GET queries":
+                    // форма «новый запрос» и правка — токен CSRF
+                    if (p1 == "new" || (id != null && p2 == "edit" && query_params[id] != null)) return html (form_html ());
+                    return not_found ();
+                case "POST queries": return save_query (null, id, body);
+                case "POST projects":
+                    if (parts.length == 3 && parts[2] == "queries") {
+                        foreach (var x in projects) if (jint (x, "id").to_string () == parts[1] || jstr (x, "identifier") == parts[1]) return save_query (x, null, body);
+                    }
+                    return not_found ();
+                case "GET roles.json":
+                    var ra = new Json.Array ();
+                    foreach (var pid in new int[] { 2, 3, 4, 5, 6 }) ra.add_object_element (role (pid));
+                    return ok ("roles", ra);
                 case "GET people":
                     if (json1 && id != null && person (id) != null) return wrap ("person", clone (person (id)));
                     return not_found ();
@@ -565,8 +591,143 @@ namespace Redmine {
                     }
                     return not_found ();
                 case "": return wrap ("project", clone (pr));
+                case "issues": return html (catalog_html ());
+                case "queries": return parts.length > 3 && parts[3] == "new" ? html (form_html ()) : not_found ();
                 default: return not_found ();
             }
+        }
+
+        // ---------- фильтры и запросы (spec 17) ----------
+
+        static DemoResp html (string text) { return new DemoResp (200, "text/html; charset=utf-8", new Bytes (text.data)); }
+
+        static string form_html () {
+            return "<html><head><meta name=\"csrf-token\" content=\"%s\" /></head><body><form id=\"query_form\"></form></body></html>".printf (CSRF);
+        }
+
+        Json.Object flt (string name, string type, GenericArray<Json.Object>? values = null, bool remote = false) {
+            var o = new Json.Object ();
+            o.set_string_member ("type", type);
+            o.set_string_member ("name", name);
+            if (remote) o.set_boolean_member ("remote", true);
+            if (values != null) {
+                var a = new Json.Array ();
+                foreach (var v in values) {
+                    var pair = new Json.Array ();
+                    pair.add_string_element (jstr (v, "name"));
+                    pair.add_string_element (jint (v, "id").to_string ());
+                    a.add_array_element (pair);
+                }
+                o.set_array_member ("values", a);
+            }
+            return o;
+        }
+
+        static Json.Array strs (string csv) {
+            var a = new Json.Array ();
+            foreach (var x in csv.split (" ")) a.add_string_element (x);
+            return a;
+        }
+
+        /** Скрипт страницы задач Redmine: availableFilters, operatorLabels, operatorByType. */
+        string catalog_html () {
+            var f = new Json.Object ();
+            f.set_object_member ("status_id", flt (t ("Status", "Статус"), "list_status", null, true));
+            f.set_object_member ("tracker_id", flt (t ("Tracker", "Трекер"), "list", trackers));
+            f.set_object_member ("priority_id", flt (t ("Priority", "Приоритет"), "list", priorities));
+            f.set_object_member ("assigned_to_id", flt (t ("Assignee", "Назначена"), "list_optional", null, true));
+            f.set_object_member ("author_id", flt (t ("Author", "Автор"), "list", null, true));
+            f.set_object_member ("watcher_id", flt (t ("Watcher", "Наблюдатель"), "list", null, true));
+            f.set_object_member ("subject", flt (t ("Subject", "Тема"), "text"));
+            f.set_object_member ("updated_on", flt (t ("Updated", "Обновлена"), "date_past"));
+            f.set_object_member ("created_on", flt (t ("Created", "Создана"), "date_past"));
+            f.set_object_member ("due_date", flt (t ("Due date", "Срок завершения"), "date"));
+            var by = new Json.Object ();
+            by.set_array_member ("list_status", strs ("o = ! c *"));
+            by.set_array_member ("list", strs ("= !"));
+            by.set_array_member ("list_optional", strs ("= ! !* *"));
+            by.set_array_member ("text", strs ("~ !~ ^ $ !* *"));
+            by.set_array_member ("date_past", strs (">t- <t- ><t- t- t ld w lw l2w m lm y >= <= >< !* *"));
+            by.set_array_member ("date", strs ("<t+ >t+ ><t+ t+ nd t ld nw w lw l2w nm m lm y >t- <t- ><t- t- = >= <= >< !* *"));
+            string[] ops = { "=", "!", "o", "c", "*", "!*", "~", "!~", "^", "$", ">t-", "<t-", "><t-", "t-", "t", "ld", "w", "lw", "l2w", "m", "lm", "y",
+                             ">=", "<=", "><", "<t+", ">t+", "><t+", "t+", "nd", "nw", "nm" };
+            string[] en = { "is", "is not", "open", "closed", "any", "none", "contains", "doesn't contain", "starts with", "ends with",
+                            "less than days ago", "more than days ago", "in the past", "days ago", "today", "yesterday", "this week", "last week",
+                            "last 2 weeks", "this month", "last month", "this year", ">=", "<=", "between", "in less than", "in more than",
+                            "in the next", "in", "tomorrow", "next week", "next month" };
+            string[] ru_ = { "соответствует", "не соответствует", "открыто", "закрыто", "все", "отсутствует", "содержит", "не содержит",
+                             "начинается с", "заканчивается на", "менее чем дней(я) назад", "более чем дней(я) назад", "в прошлом", "дней(я) назад",
+                             "сегодня", "вчера", "на этой неделе", "на прошлой неделе", "последние 2 недели", "в этом месяце", "в прошлом месяце",
+                             "в этом году", ">=", "<=", "между", "менее чем через", "более чем через", "в следующие", "через", "завтра",
+                             "на следующей неделе", "в следующем месяце" };
+            var labels = new Json.Object ();
+            for (int k = 0; k < ops.length; k++) labels.set_string_member (ops[k], ru ? ru_[k] : en[k]);
+            return "<html><head><meta name=\"csrf-token\" content=\"%s\" /></head><body><script>\n//<![CDATA[\n".printf (CSRF)
+                + "var availableFilters = " + json_to_string (node_of (f)) + ";\n"
+                + "var operatorLabels = " + json_to_string (node_of (labels)) + ";\n"
+                + "var operatorByType = " + json_to_string (node_of (by)) + ";\n//]]>\n</script></body></html>";
+        }
+
+        void seed_queries () {
+            var a = new Query ().add ("f[]", "status_id").add ("op[status_id]", "o").add ("f[]", "tracker_id").add ("op[tracker_id]", "=").add ("v[tracker_id][]", "1");
+            add_query (t ("Open bugs", "Открытые ошибки"), true, null, a);
+            var b = new Query ().add ("f[]", "status_id").add ("op[status_id]", "o").add ("f[]", "priority_id").add ("op[priority_id]", "=")
+                .add ("v[priority_id][]", "3").add ("v[priority_id][]", "4").add ("v[priority_id][]", "5").add ("sort", "priority:desc");
+            add_query (t ("Urgent work", "Срочное"), false, null, b);
+            var c = new Query ().add ("f[]", "status_id").add ("op[status_id]", "*").add ("f[]", "updated_on").add ("op[updated_on]", ">t-").add ("v[updated_on][]", "7");
+            add_query (t ("Mobile: this week", "Мобильное: за неделю"), true, 1, c);
+        }
+
+        int add_query (string name, bool is_public, int? project_id, Query p, int id = 0) {
+            if (id == 0) id = ++next_query;
+            var o = new Json.Object ();
+            o.set_int_member ("id", id);
+            o.set_string_member ("name", name);
+            o.set_boolean_member ("is_public", is_public);
+            if (project_id != null) o.set_int_member ("project_id", project_id); else o.set_null_member ("project_id");
+            for (int k = 0; k < (int) queries.length; k++) if (jint (queries[k], "id") == id) { queries[k] = o; query_params[id] = p; return id; }
+            queries.add (o);
+            query_params[id] = p;
+            return id;
+        }
+
+        /** Веб-форма запроса: новый (project — или null), правка (_method=patch) и удаление (_method=delete) по id. */
+        DemoResp save_query (Json.Object? project, int? id, Bytes? body) {
+            var form = new Query ();
+            foreach (var kv in (body != null ? bytes_text (body) : "").split ("&")) {
+                if (kv == "") continue;
+                var eq = kv.index_of ("=");
+                var k = Uri.unescape_string ((eq < 0 ? kv : kv.substring (0, eq)).replace ("+", " ")) ?? "";
+                form.add (k, eq < 0 ? "" : Uri.unescape_string (kv.substring (eq + 1).replace ("+", " ")) ?? "");
+            }
+            if (first_val (form, "authenticity_token") != CSRF) return new DemoResp (422, "text/html", new Bytes ("Invalid token".data));
+            var method = first_val (form, "_method") ?? "post";
+            if (id != null && query_params[id] == null) return not_found ();
+            if (method == "delete") {
+                for (int k = (int) queries.length - 1; k >= 0; k--) if (jint (queries[k], "id") == id) queries.remove_index (k);
+                query_params.remove (id);
+                return new DemoResp (302, "text/html", new Bytes (new uint8[0])) { location = DemoServer.BASE + "/issues" };
+            }
+            var name = (first_val (form, "query[name]") ?? "").strip ();
+            string? invalid = name == "" ? t ("Name cannot be blank", "Название не может быть пустым")
+                : (name.char_count () > 255 ? t ("Name is too long (maximum is 255 characters)", "Название слишком длинное (максимум 255 символов)") : null);
+            if (invalid != null) return html ("<div id=\"errorExplanation\"><ul><li>%s</li></ul></div>".printf (invalid));
+            var p = new Query ();
+            var sort = new GenericArray<string> ();
+            for (int k = 0; k < form.keys.length; k++) {
+                var key = form.keys[k];
+                if (key == "f[]" || key.has_prefix ("op[") || key.has_prefix ("v[")) p.add (key, form.vals[k]);
+                if (key.has_prefix ("query[sort_criteria]")) {
+                    if (k + 1 < form.keys.length && form.keys[k + 1] == key) { sort.add (form.vals[k] + ":" + form.vals[k + 1]); k++; }
+                }
+            }
+            if (sort.length > 0) p.add ("sort", string.joinv (",", sort.data));
+            int? pid = project != null && first_val (form, "query_is_for_all") != "1" ? (int?) jint (project, "id") : null;
+            if (id != null && project == null) foreach (var x in queries) if (jint (x, "id") == id && !x.get_member ("project_id").is_null ())
+                pid = first_val (form, "query_is_for_all") == "1" ? null : (int?) jint (x, "project_id");
+            var nid = add_query (name, first_val (form, "query[visibility]") != "0", pid, p, id ?? 0);
+            var where = project != null ? "/projects/" + jstr (project, "identifier") : "";
+            return new DemoResp (302, "text/html", new Bytes (new uint8[0])) { location = DemoServer.BASE + where + "/issues?query_id=%d".printf (nid) };
         }
 
         // ---------- задачи ----------
@@ -602,7 +763,16 @@ namespace Redmine {
             return o;
         }
 
-        DemoResp list (Query q) {
+        DemoResp list (Query q0) {
+            // запрос сервера (spec 17.4): его условия и сортировка — к параметрам
+            var q = q0;
+            var qid = num (first_val (q0, "query_id"));
+            if (qid != null && query_params[qid] != null) {
+                q = new Query ().add ("set_filter", "1");
+                for (int k = 0; k < q0.keys.length; k++) q.add (q0.keys[k], q0.vals[k]);
+                var sp = query_params[qid];
+                for (int k = 0; k < sp.keys.length; k++) q.add (sp.keys[k], sp.vals[k]);
+            }
             var all = new GenericArray<Json.Object> ();
             foreach (var i in issues) all.add (i);
             string[] fields = {};
@@ -612,7 +782,7 @@ namespace Redmine {
             if ("status_id" in fields) {
                 var op = first_val (q, "op[status_id]") ?? "";
                 st = op == "o" ? "open" : (op == "c" ? "closed" : "*");
-            } else st = first_val (q, "status_id") ?? "open";
+            } else st = first_val (q, "status_id") ?? (first_val (q, "set_filter") == "1" && fields.length > 0 && !("favourite_state" in fields) && !("project_id" in fields) ? "*" : "open");
             var sn = num (st);
             filter (all, (i) => {
                 var closed = jbool (jobj (i, "status"), "is_closed");
@@ -653,9 +823,36 @@ namespace Redmine {
             }
             foreach (var fl in fields) {
                 var v = (first_val (q, "v[%s][]".printf (fl)) ?? "");
+                var op = first_val (q, "op[%s]".printf (fl)) ?? "";
+                var vals = new GenericSet<string> (str_hash, str_equal);
+                for (int k = 0; k < q.keys.length; k++) if (q.keys[k] == "v[%s][]".printf (fl)) vals.add (q.vals[k] == "me" ? me.to_string () : q.vals[k]);
                 switch (fl) {
                     case "favourite_state": filter (all, (i) => favorites.contains (jint (i, "id"))); break;
-                    case "subject": filter (all, (i) => v.down () in jstr (i, "subject").down ()); break;
+                    case "status_id":
+                    case "tracker_id":
+                    case "priority_id":
+                    case "assigned_to_id":
+                    case "author_id":
+                        var member = fl.substring (0, fl.length - 3);
+                        if (fl == "status_id" && !(op == "=" || op == "!")) break;
+                        filter (all, (i) => {
+                            var ref_ = jobj (i, member);
+                            switch (op) {
+                                case "=": return ref_ != null && vals.contains (jint (ref_, "id").to_string ());
+                                case "!": return ref_ == null || !vals.contains (jint (ref_, "id").to_string ());
+                                case "!*": return ref_ == null;
+                                case "*": return ref_ != null;
+                                default: return true;
+                            }
+                        });
+                        break;
+                    case "watcher_id":
+                        filter (all, (i) => {
+                            foreach (var w in jarr (i, "watchers")) if (vals.contains (jint (w, "id").to_string ())) return op != "!";
+                            return op == "!";
+                        });
+                        break;
+                    case "subject": filter (all, (i) => (v.down () in jstr (i, "subject").down ()) == (op != "!~")); break;
                     case "notes":
                         filter (all, (i) => {
                             foreach (var j in jarr (i, "journals")) if (v.down () in jstr (j, "notes").down ()) return true;
@@ -665,18 +862,23 @@ namespace Redmine {
                     case "updated_on":
                     case "created_on":
                         var d = parse_iso_ms (v);
+                        if (op == ">t-") d = now_ms () - (int64) (num (v) ?? 0) * DAY_MS;
+                        else if (op == "t") d = parse_iso_ms (new DateTime.now_local ().format ("%Y-%m-%dT00:00:00%:z"));
+                        else if (op == "w") d = now_ms () - 7 * DAY_MS;
+                        else if (op == "m") d = now_ms () - 30 * DAY_MS;
                         var key = fl;
                         if (d != 0) filter (all, (i) => parse_iso_ms (jstr (i, key)) >= d);
                         break;
                     default: break; // project_id=mine — участник всех проектов
                 }
             }
-            var sort = (first_val (q, "sort") ?? "updated_on:desc").split (":");
+            var sort = (first_val (q, "sort") ?? "updated_on:desc").split (",")[0].split (":");
             bool desc = sort.length > 1 && sort[1] == "desc";
             var by = sort[0];
             all.sort_with_data ((a, b) => {
                 int c;
                 if (by == "id") c = jint (a, "id") - jint (b, "id");
+                else if (by == "priority") c = jint (jobj (a, "priority"), "id") - jint (jobj (b, "priority"), "id");
                 else {
                     var k = by == "created_on" ? "created_on" : "updated_on";
                     c = strcmp (jstr (a, k), jstr (b, k));

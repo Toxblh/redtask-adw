@@ -53,11 +53,16 @@ namespace Redmine {
         public string sort = "updated_on:desc";
         public int limit = 50;
         public int offset = 0;
+        /** Свой фильтр (spec 17.2): готовые параметры filter_params — вместо полей выше, кроме project_id. */
+        public Query? params = null;
+        /** Серверный запрос (spec 17.4): issues.json?query_id=N. */
+        public int query_id = 0;
         public IssueQuery copy () {
             var q = new IssueQuery ();
             q.project_id = project_id; q.assigned_to_me = assigned_to_me; q.watched_by_me = watched_by_me;
             q.authored_by_me = authored_by_me; q.favourite = favourite; q.status = status; q.parent_id = parent_id; q.fixed_version_id = fixed_version_id; q.subject = subject;
             q.updated_since = updated_since; q.sort = sort; q.limit = limit; q.offset = offset;
+            q.params = params; q.query_id = query_id;
             return q;
         }
     }
@@ -148,6 +153,7 @@ namespace Redmine {
                 var hd = new Soup.MessageHeaders (Soup.MessageHeadersType.RESPONSE);
                 hd.replace ("Content-Type", d.type);
                 hd.replace ("X-Request-Id", "demo");
+                if (d.location != null) hd.replace ("Location", d.location);
                 return new Resp () { body = d.body, code = d.code, headers = hd };
             }
             string target = u;
@@ -384,6 +390,14 @@ namespace Redmine {
 
         // ---------- задачи ----------
         public async IssueChunk issues (IssueQuery q, Cancellable? c = null) throws Error {
+            if (q.params != null || q.query_id > 0) {
+                var p = new Query ();
+                if (q.params != null) for (int i = 0; i < q.params.keys.length; i++) p.add (q.params.keys[i], q.params.vals[i]);
+                p.add ("query_id", q.query_id > 0 ? q.query_id.to_string () : null)
+                    .add ("project_id", q.project_id > 0 ? q.project_id.to_string () : null)
+                    .add ("limit", q.limit.to_string ()).add ("offset", q.offset.to_string ());
+                return page_of (yield get_obj ("issues.json", p, c));
+            }
             // фильтр плагина — только полной формой f[]/op/v, и тогда статус тоже в ней: простые параметры сервер не смешивает
             if (q.favourite) return page_of (yield get_obj ("issues.json", new Query ()
                 .add ("set_filter", "1")
@@ -771,6 +785,32 @@ namespace Redmine {
             var code = r.code;
             if (code != 200) throw http_error ((int) code, "issue page: HTTP %u".printf (code));
             return r.text ();
+        }
+
+        /** HTML страницы задач проекта (0 — всех задач): каталог фильтров, spec 17.1. */
+        public async string issues_page_html (int project_id) throws Error {
+            var r = yield html_page (project_id > 0 ? "projects/%d/issues".printf (project_id) : "issues");
+            if (r.code != 200) throw http_error ((int) r.code, "issues page: HTTP %u".printf (r.code));
+            return r.text ();
+        }
+
+        /** Сохранённые запросы сервера, все страницы (spec 17.4). */
+        public async GenericArray<Json.Object> server_queries () throws Error {
+            var all = new GenericArray<Json.Object> ();
+            // ponytail: потолок 1000 запросов (10 страниц)
+            for (int offset = 0; offset < 1000; ) {
+                var page = yield get_obj ("queries.json", new Query ().add ("limit", "100").add ("offset", offset.to_string ()));
+                var items = jarr (page, "queries");
+                foreach (var x in items) all.add (x);
+                offset += items.length;
+                if (items.length == 0 || offset >= jint (page, "total_count")) break;
+            }
+            return all;
+        }
+
+        /** Роли сервера {id, name} — видимость запроса «ролям». */
+        public async GenericArray<Json.Object> roles () throws Error {
+            return jarr (yield get_obj ("roles.json"), "roles");
         }
 
         /** Страница /people/:id (аватар, телефоны — spec 11); null — профиля нет или он закрыт. */

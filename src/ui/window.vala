@@ -52,6 +52,7 @@ namespace Redmine {
                 { "refresh", on_refresh },
                 { "new-issue", () => new_issue (0, 0) },
                 { "back", on_back },
+                { "queries", () => push_list (new QueriesPage (0)) },
             };
             add_action_entries (actions, this);
 
@@ -69,6 +70,7 @@ namespace Redmine {
             });
             sections.notify["visible-child"].connect (sync_empty);
             list_nav.notify["visible-page"].connect (sync_empty);
+            Queries.get_default ().changed.connect (sync_fav_queries);
             if (Environment.get_variable ("REDTASK_SHOT") != null) Shots.schedule (this);
         }
 
@@ -82,6 +84,12 @@ namespace Redmine {
 
         private void sync_narrow () {
             search_button.visible = inner.collapsed;
+            // избранные запросы — секция боковой панели; в нижней панели телефона им места нет (они на экране «Запросы»)
+            foreach (var q in fav_sections) {
+                if (q.page == null) continue;
+                if (inner.collapsed && sections.visible_child == q) sections.visible_child_name = "mine";
+                q.page.visible = !inner.collapsed;
+            }
             var child = sections.get_child_by_name ("search");
             if (child == null) return;
             var page = sections.get_page (child);
@@ -130,16 +138,32 @@ namespace Redmine {
 
         /** Звезда не записалась (откат уже сделан): без веб-сессии — вход через сайт и повтор. */
         public void favorite_failed (Error e, int id, bool on) {
+            if (error_code (e) != 401) { toast_error (e); return; }
+            web_login_toast (e.message, () => {
+                var f = Favorites.get_default ();
+                f.set_favorite.begin (id, on, (o, r) => {
+                    try { f.set_favorite.end (r); } catch (Error e2) { toast_error (e2); }
+                });
+            });
+        }
+
+        /** Запрос остался только на устройстве (spec 17.3): без веб-сессии — вход через сайт, затем повтор всех таких. */
+        public void query_not_saved (Error e) {
+            var text = _("Saved only on this device: %s").printf (Queries.reason_of (e));
+            if (error_code (e) != 401) { toast (text, 6); return; }
+            web_login_toast (text, () => {});
+        }
+
+        /** Тост с «Войти на сайте»: после входа — retry и повтор своих запросов, не дошедших до сервера. */
+        private void web_login_toast (string text, owned Callback retry) {
             var s = App.get ().session;
-            if (error_code (e) != 401 || s == null) { toast_error (e); return; }
-            var t = new Adw.Toast (e.message) { timeout = 0, button_label = _("Sign In on Website") };
+            if (s == null) return;
+            var t = new Adw.Toast (text) { timeout = 0, button_label = _("Sign In on Website") };
             t.button_clicked.connect (() => {
                 var d = new WebLoginDialog (s.server, true);
                 d.web_ready.connect (() => {
-                    var f = Favorites.get_default ();
-                    f.set_favorite.begin (id, on, (o, r) => {
-                        try { f.set_favorite.end (r); } catch (Error e2) { toast_error (e2); }
-                    });
+                    retry ();
+                    Queries.get_default ().retry_pending (true);
                 });
                 d.present (this);
             });
@@ -170,6 +194,59 @@ namespace Redmine {
             s.page = page;
         }
 
+        private GenericArray<QuerySection> fav_sections = new GenericArray<QuerySection> ();
+        private string fav_sig = "";
+        private int unread = 0;
+
+        /** Избранные запросы — секция «Запросы» под «Мои задачи» (spec 17.5); у ViewStack нет вставки — хвост снимаем и возвращаем. */
+        private void sync_fav_queries () {
+            if (!built) return;
+            var qs = Queries.get_default ();
+            var sb = new StringBuilder ();
+            foreach (var f in qs.favs) sb.append ("%s\t%s\n".printf (jstr (f, "key"), qs.title_of (f)));
+            if (sb.str == fav_sig) return;
+            fav_sig = sb.str;
+            var visible = sections.visible_child_name;
+            var tail = new GenericArray<Section> ();
+            string[] names = {}, titles = {}, icons = {};
+            bool after = false;
+            var pages = sections.pages;
+            var drop = new GenericArray<Gtk.Widget> ();
+            for (uint i = 0; i < pages.get_n_items (); i++) {
+                var p = (Adw.ViewStackPage) pages.get_item (i);
+                if (p.name == "mine") { after = true; continue; }
+                if (!after) continue;
+                drop.add (p.child);
+                if (p.child is QuerySection) continue;
+                tail.add ((Section) p.child);
+                names += p.name;
+                titles += p.title;
+                icons += p.icon_name;
+            }
+            foreach (var w in drop) sections.remove (w);
+            fav_sections.remove_range (0, fav_sections.length);
+            for (int i = 0; i < qs.favs.length; i++) {
+                var f = qs.favs[i];
+                var iq = qs.issue_query (f, 0);
+                var title = qs.title_of (f);
+                if (iq == null || title == "") continue;
+                var sec = new QuerySection (iq);
+                add_section (sec, "query-%d".printf (i), title, "view-list-bullet-symbolic");
+                if (fav_sections.length == 0) {
+                    sec.page.starts_section = true;
+                    sec.page.section_title = _("Saved Queries");
+                }
+                fav_sections.add (sec);
+            }
+            for (int i = 0; i < tail.length; i++) {
+                add_section (tail[i], names[i], titles[i], icons[i]);
+                if (i == 0) tail[i].page.starts_section = fav_sections.length > 0;
+            }
+            set_unread (unread);
+            sections.visible_child_name = sections.get_child_by_name (visible) != null ? visible : "mine";
+            sync_narrow ();
+        }
+
         private void build_sections () {
             if (built) {
                 // новая учётка: разделы держат данные прежней — пересоздаём
@@ -177,6 +254,8 @@ namespace Redmine {
                 while ((c = sections.get_first_child ()) != null) sections.remove (c);
             }
             built = true;
+            fav_sig = "";
+            fav_sections.remove_range (0, fav_sections.length);
             add_section (new IssueListSection (ListKind.MINE), "mine", _("My Issues"), "avatar-default-symbolic");
             add_section (new IssueListSection (ListKind.WATCHED), "watched", _("Watching"), "view-reveal-symbolic");
             add_section (new IssueListSection (ListKind.FAVORITES), "favorites", _("Favorites"), "starred-symbolic");
@@ -184,6 +263,7 @@ namespace Redmine {
             add_section (new SearchSection (), "search", _("Search"), "system-search-symbolic");
             add_section (new NotificationsSection (), "notifications", _("Notifications"), "preferences-system-notifications-symbolic");
             sections.visible_child_name = "mine";
+            sync_fav_queries ();
             sync_narrow ();
             issue_nav.replace_with_tags ({ "empty" });
             list_nav.replace_with_tags ({ "sections" });
@@ -325,6 +405,7 @@ namespace Redmine {
         }
 
         public void set_unread (int n) {
+            unread = n;
             var page = sections.get_page (sections.get_child_by_name ("notifications"));
             if (page == null) return;
             page.badge_number = n;

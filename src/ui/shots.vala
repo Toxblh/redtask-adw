@@ -15,6 +15,9 @@ namespace Redmine {
      * REDTASK_SHOT_PRIVATE=1 — с REDTASK_SHOT_TYPE: включить «Приватная заметка» в диалоге.
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
  * REDTASK_SHOT_CLEAR=N — с REDTASK_SHOT_ACTION=app.preferences: очистить N-ю категорию кэша (5 — всё).
+ * REDTASK_SHOT_QUERIES=pid — экран запросов проекта (0 — все); REDTASK_SHOT_SAVEQ=имя — до этого сохранить свой запрос
+ *   (у себя и на сервер, в демо) и отметить его «★»; REDTASK_SHOT_FAVQ=1 — «★» первому серверному запросу.
+ * REDTASK_SHOT_FILTER=pid — экран «Фильтр» с тремя условиями; REDTASK_SHOT_FILTER_DIALOG=cond|editN|save — диалог нового условия, правки N-го или сохранения.
  * REDTASK_SHOT_DEMO=1 — демо-режим (spec 6) вместо входа; вход в настройках и связке ключей не меняется.
      */
     namespace Shots {
@@ -58,6 +61,26 @@ namespace Redmine {
                 if (sub != null) w.open_content (new VersionPage.subtasks (int.parse (sub), ""));
                 var issue = Environment.get_variable ("REDTASK_SHOT_ISSUE");
                 if (issue != null) w.open_issue (int.parse (issue));
+                var queries = Environment.get_variable ("REDTASK_SHOT_QUERIES");
+                if (queries != null) w.push_list (new QueriesPage (int.parse (queries)));
+                var fpid = Environment.get_variable ("REDTASK_SHOT_FILTER");
+                if (fpid != null) {
+                    var fp = new FilterPage (int.parse (fpid), null, demo_conditions ());
+                    w.push_list (fp);
+                    var fd = Environment.get_variable ("REDTASK_SHOT_FILTER_DIALOG");
+                    if (fd != null) Timeout.add (delay / 4, () => {
+                        if (fd == "save") fp.open_save ();
+                        else fp.edit_condition (fd.has_prefix ("edit") ? (int?) int.parse (fd.substring (4)) : null);
+                        return Source.REMOVE;
+                    });
+                }
+                return Source.REMOVE;
+            });
+            // свой запрос и «★» — до показа экрана запросов: в демо доходит до «сервера» веб-формой
+            var saveq = Environment.get_variable ("REDTASK_SHOT_SAVEQ");
+            var favq = Environment.get_variable ("REDTASK_SHOT_FAVQ");
+            if (saveq != null || favq != null) Timeout.add (delay / 4, () => {
+                prepare_queries.begin (saveq, favq != null, int.parse (Environment.get_variable ("REDTASK_SHOT_QUERIES") ?? "0"));
                 return Source.REMOVE;
             });
             // REDTASK_SHOT_SWITCH=N — как щелчок по N-му разделу боковой панели (0 — «Мои»)
@@ -154,6 +177,43 @@ namespace Redmine {
                 w.application.quit ();
                 return Source.REMOVE;
             });
+        }
+
+        private Json.Array demo_conditions () {
+            var a = new Json.Array ();
+            a.add_object_element (cond ("status_id", "o", {}, {}, _("Status"), _("open")));
+            a.add_object_element (cond ("tracker_id", "=", { "1", "2" }, { "Bug", "Feature" }, _("Tracker"), _("is")));
+            a.add_object_element (cond ("assigned_to_id", "=", { "me" }, { _("me") }, _("Assignee"), _("is")));
+            return a;
+        }
+
+        private Json.Object cond (string field, string op, string[] vals, string[] texts, string name, string label) {
+            var o = new Json.Object ();
+            o.set_string_member ("field", field);
+            o.set_string_member ("op", op);
+            var v = new Json.Array ();
+            foreach (var x in vals) v.add_string_element (x);
+            o.set_array_member ("values", v);
+            var t = new Json.Array ();
+            foreach (var x in texts) t.add_string_element (x);
+            o.set_array_member ("texts", t);
+            o.set_string_member ("name", name);
+            o.set_string_member ("op_label", label);
+            o.set_string_member ("text", string.joinv (", ", texts));
+            return o;
+        }
+
+        private async void prepare_queries (string? name, bool fav_server, int pid) {
+            var qs = Queries.get_default ();
+            try { yield qs.refresh_server (); } catch (Error e) { warning ("shot: queries: %s", e.message); }
+            if (fav_server && qs.server.length > 0 && !qs.is_fav (Queries.key_of (qs.server[0]))) qs.set_fav (qs.server[0], true);
+            if (name == null) return;
+            var sort = new Json.Array ();
+            var q = qs.save (null, pid, name, "", 0, {}, false, demo_conditions (), sort);
+            var err = yield qs.push (q);
+            debug ("shot: query pushed: %s server_id=%d", err != null ? err.message : "ok", jint (q, "server_id"));
+            qs.set_fav (q, true);
+            qs.remember (pid, demo_conditions (), sort);
         }
 
         private void dump_wide (Gtk.Widget wd, int limit, int depth) {

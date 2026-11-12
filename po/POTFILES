@@ -24,3 +24,5 @@ src/ui/shots.vala
 src/ui/widgets.vala
 src/ui/window.vala
 src/util.vala
+src/store/queries.vala
+src/ui/queries.vala

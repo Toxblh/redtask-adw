@@ -540,7 +540,7 @@ namespace Redmine {
     // ---- листы согласования (spec 10, набор custom_tables) ----
 
     /** Текст ячейки HTML: без тегов, сущности раскрыты, пробелы и переносы (и &nbsp;) — один пробел, края обрезаны. */
-    private string html_text (string html) {
+    internal string html_text (string html) {
         try {
             var t = /<[^>]*>/.replace (html, -1, 0, "");
             t = /&(#\d+|#x[0-9a-fA-F]+|[a-z]+);/.replace_eval (t, -1, 0, 0, (mi, res) => {

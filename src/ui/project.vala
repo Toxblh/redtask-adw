@@ -78,6 +78,9 @@ namespace Redmine {
             var add = new Gtk.Button.from_icon_name ("list-add-symbolic") { tooltip_text = _("New Issue in Project") };
             add.clicked.connect (() => win_of (this)?.new_issue (project_id, 0));
             hb.pack_end (add);
+            var queries = new Gtk.Button.from_icon_name ("view-list-bullet-symbolic") { tooltip_text = _("Queries and Filters") };
+            queries.clicked.connect (() => win_of (this)?.push_list (new QueriesPage (project_id)));
+            hb.pack_end (queries);
             search = new Gtk.Button.from_icon_name ("system-search-symbolic") { tooltip_text = _("Search") };
             search.clicked.connect (() => issues.start_search ());
             hb.pack_end (search);

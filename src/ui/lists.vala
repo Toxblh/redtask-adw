@@ -1,7 +1,7 @@
 /* Разделы со списками: Мои, Слежу, Избранное, задачи проекта; Проекты; Поиск. */
 namespace Redmine {
 
-    public enum ListKind { MINE, WATCHED, FAVORITES, PROJECT }
+    public enum ListKind { MINE, WATCHED, FAVORITES, PROJECT, QUERY }
 
     /**
      * Список задач с фильтром Открытые/Закрытые/Все, поиском по загруженному и подгрузкой при прокрутке.
@@ -34,10 +34,14 @@ namespace Redmine {
         private bool loaded_once = false;
         private int64 loaded_at = 0;
 
-        public IssueList (ListKind kind, int project_id = 0) {
+        /** Свой фильтр или запрос (spec 17): статус — в его условиях, переключателя нет. */
+        private IssueQuery? base_query = null;
+
+        public IssueList (ListKind kind, int project_id = 0, IssueQuery? base_query = null) {
             Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
             this.kind = kind;
             this.project_id = project_id;
+            this.base_query = base_query;
 
             filter = new Adw.ToggleGroup () { homogeneous = true, margin_start = 12, margin_end = 12, margin_top = 6, margin_bottom = 6 };
             filter.add (new Adw.Toggle () { name = "open", label = _("Open") });
@@ -45,6 +49,7 @@ namespace Redmine {
             filter.add (new Adw.Toggle () { name = "*", label = _("All") });
             filter.active_name = "open";
             filter.notify["active-name"].connect (() => { animate_switch (); reload (true); });
+            filter.visible = base_query == null;
             append (filter);
 
             search_entry = new Gtk.SearchEntry () { placeholder_text = _("Search in this list"), hexpand = true };
@@ -92,6 +97,7 @@ namespace Redmine {
 
         /** Следующий/предыдущий фильтр по кругу. */
         private void step_filter (int dir) {
+            if (!filter.visible) return;
             swipe_dir = dir; // по кругу: с «Все» вперёд на «Открытые» — всё равно влево
             filter.active_name = FILTERS[(cur + dir + FILTERS.length) % FILTERS.length];
             swipe_dir = 0;
@@ -138,6 +144,11 @@ namespace Redmine {
         }
 
         private string cache_key () {
+            if (base_query != null) {
+                var b = base_query;
+                var sig = "%d|%d|%s".printf (b.project_id, b.query_id, b.params != null ? b.params.encode () : "");
+                return "list-q-" + Checksum.compute_for_string (ChecksumType.SHA1, sig).substring (0, 16);
+            }
             var k = kind == ListKind.MINE ? "mine" : (kind == ListKind.WATCHED ? "watched" : (kind == ListKind.FAVORITES ? "favorites" : "project-%d".printf (project_id)));
             return "list-%s-%s".printf (k, filter.active_name == "*" ? "all" : filter.active_name);
         }
@@ -175,6 +186,12 @@ namespace Redmine {
         public void refresh () { reload (false); }
 
         private IssueQuery query () {
+            if (base_query != null) {
+                var bq = base_query.copy ();
+                bq.limit = 50;
+                bq.offset = 0;
+                return bq;
+            }
             var q = new IssueQuery ();
             q.status = filter.active_name;
             q.assigned_to_me = kind == ListKind.MINE;
