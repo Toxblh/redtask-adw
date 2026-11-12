@@ -1367,3 +1367,12 @@ msgstr "Демо-режим: выдуманные данные только на
 
 msgid "Select a project"
 msgstr "Выберите проект"
+
+msgid "Add Watcher"
+msgstr "Добавить наблюдателя"
+
+msgid "%s is now watching this issue"
+msgstr "%s теперь наблюдает за задачей"
+
+msgid "The server does not allow changing watchers from the app"
+msgstr "Сервер не разрешает менять наблюдателей из приложения"

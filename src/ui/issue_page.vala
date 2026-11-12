@@ -61,6 +61,7 @@ namespace Redmine {
         private Issue? issue = null;
         private GenericArray<Json.Object> times = new GenericArray<Json.Object> ();
         private Perms can = new Perms ();
+        private int perms_project = 0; // чьи права лежат в can
         /** Имена значений журналов: поле (status_id…) → id → имя. */
         private HashTable<string, HashTable<string, string>> names = new HashTable<string, HashTable<string, string>> (str_hash, str_equal);
         private GenericSet<string> closed_statuses = new GenericSet<string> (str_hash, str_equal);
@@ -183,6 +184,7 @@ namespace Redmine {
                 var c = s.cache.load ("issue-%d".printf (issue_id));
                 if (c != null && c.get_node_type () == Json.NodeType.OBJECT) {
                     issue = new Issue (c.get_object ());
+                    cached_perms (s);
                     render ();
                 }
             }
@@ -202,6 +204,7 @@ namespace Redmine {
                     fresh.o.set_member ("_cf_labels", issue.o.get_member ("_cf_labels").copy ());
                 issue = fresh;
                 s.cache.save ("issue-%d".printf (issue_id), obj_node (fresh.o));
+                cached_perms (s);
                 render ();
             } catch (Error e) {
                 if (my != gen) return;
@@ -255,12 +258,25 @@ namespace Redmine {
             render ();
         }
 
+        /** Права проекта задачи из кэша любого возраста — в тот же кадр, что и задача (spec 16.2). */
+        private void cached_perms (Session s) {
+            if (perms_project == issue.project.id) return;
+            GenericSet<string>? p;
+            if (!s.refs.permissions_cached (issue.project.id, out p)) return;
+            can = new Perms () { known = true, set = p };
+            perms_project = issue.project.id;
+        }
+
         private async void load_perms (Session s, int my) {
+            var pid = issue.project.id;
             try {
-                var p = yield s.refs.permissions (issue.project.id);
+                var p = yield s.refs.permissions (pid);
                 if (my != gen) return;
                 can = new Perms () { known = true, set = p };
+                perms_project = pid;
             } catch (Error e) {
+                // сбой сети не затирает права из кэша; без кэша — прежнее «неизвестно, судим по старому поведению»
+                if (my != gen || perms_project == pid) return;
                 can = new Perms () { known = true, set = null };
             }
             render ();
@@ -350,6 +366,13 @@ namespace Redmine {
                 d.present (this);
             });
             act ("attach").activate.connect (() => pick_files.begin ());
+            act ("add-watcher").activate.connect (() => {
+                var people = new MentionSource ();
+                people.set_issue (issue);
+                var d = new PersonPickerDialog (people) { title = _("Add Watcher"), want_login = false };
+                d.chosen.connect ((id, name) => add_watcher.begin (id, name));
+                d.present (this);
+            });
             act ("mute").activate.connect (() => {
                 var p = Prefs.get_default ();
                 var on = !p.muted ("muted-issues").contains (issue_id);
@@ -373,6 +396,10 @@ namespace Redmine {
             if (issue == null) return false;
             foreach (var w in issue.watchers) if (jint (w, "id") == App.get ().session.user_id) return true;
             return false;
+        }
+
+        private bool can_add_watcher () {
+            return can.state ("add_issue_watchers") != 0 && can.known && !App.get ().session.api.watchers_forbidden (issue_id);
         }
 
         private bool can_edit () {
@@ -506,6 +533,22 @@ namespace Redmine {
             } catch (Error e) {
                 if (error_code (e) == 403 || error_code (e) == 401) watch_on_web ();
                 else win ()?.toast_error (e);
+            }
+        }
+
+        /** spec 16.1: 403 — отказ запомнен в api, «+» пропадает при перерисовке; сайт не открываем. */
+        private async void add_watcher (int id, string name) {
+            var s = App.get ().session;
+            if (s == null) return;
+            try {
+                yield s.api.set_watcher (issue_id, id, true);
+                win ()?.toast (_("%s is now watching this issue").printf (name));
+                yield load ();
+            } catch (Error e) {
+                if (error_code (e) == 403 || error_code (e) == 401) {
+                    win ()?.toast (_("The server does not allow changing watchers from the app"));
+                    render ();
+                } else win ()?.toast_error (e);
             }
         }
 
@@ -909,8 +952,9 @@ namespace Redmine {
 
         private void render_watchers () {
             var ws = issue.watchers;
-            if (ws.length == 0) return;
-            section_header (_("Watchers") + " %u".printf (ws.length), null, null);
+            var add = can_add_watcher ();
+            if (ws.length == 0 && !add) return;
+            section_header (_("Watchers") + (ws.length > 0 ? " %u".printf (ws.length) : ""), _("Add Watcher"), add ? "issue.add-watcher" : null);
             var wrap = new Adw.WrapBox () { child_spacing = 6, line_spacing = 6 };
             foreach (var w in ws) {
                 var c = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);

@@ -556,6 +556,9 @@ namespace Redmine {
     /** «Упомянуть» (spec 8.2): тот же список с полем поиска; пусто — люди задачи. */
     public class PersonPickerDialog : Adw.Dialog {
         public signal void picked (string login);
+        /** want_login = false: вместо логина — id и имя (наблюдатель, spec 16.1). */
+        public signal void chosen (int id, string name);
+        public bool want_login = true;
         private Gtk.ListBox list;
         private GenericArray<Json.Object> items = new GenericArray<Json.Object> ();
         private MentionSource src;
@@ -593,6 +596,11 @@ namespace Redmine {
 
         private void pick (int i) {
             if (i < 0 || i >= items.length) return;
+            if (!want_login) {
+                chosen (jint (items[i], "id"), jstr (items[i], "name"));
+                close ();
+                return;
+            }
             src.login_of.begin (items[i], (o, r) => {
                 var login = src.login_of.end (r);
                 if (login == "") return;

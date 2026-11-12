@@ -396,6 +396,27 @@ namespace Redmine {
             return res;
         }
 
+        /** Права из кэша любого возраста, без сети (spec 16.2): false — в кэше их нет. */
+        public bool permissions_cached (int project_id, out GenericSet<string>? p) {
+            p = null;
+            var h = cache.load ("my-roles");
+            if (h == null || h.get_node_type () != Json.NodeType.OBJECT) return false;
+            var roles = h.get_object ();
+            var res = new GenericSet<string> (str_hash, str_equal);
+            if (jbool (roles, "admin")) { res.add ("*"); p = res; return true; }
+            var rm = jobj (roles, "roles");
+            var key = project_id.to_string ();
+            if (rm == null || !rm.has_member (key)) return true; // не участник — как в permissions (): «не сообщил»
+            var ids = rm.get_array_member (key);
+            for (uint i = 0; i < ids.get_length (); i++) {
+                var rh = cache.load ("role-%d".printf ((int) ids.get_int_element (i)));
+                if (rh == null || rh.get_node_type () != Json.NodeType.ARRAY) return false;
+                rh.get_array ().foreach_element ((a, j, e) => res.add (e.get_string ()));
+            }
+            p = res;
+            return true;
+        }
+
         /** Сохранённое любого возраста (показать сразу); fresh — моложе суток, сеть не нужна. */
         public Json.Object? cached (string key, out bool fresh) {
             var h = cache.load (key);
