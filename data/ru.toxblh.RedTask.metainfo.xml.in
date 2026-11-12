@@ -48,6 +48,13 @@
     <color type="primary" scheme_preference="dark">#a51d2d</color>
   </branding>
   <releases>
+    <release version="1.1.2" date="2026-11-12">
+      <description>
+        <p>Custom filters and saved queries — on the device and on the server; favourite queries in the sidebar show how many unread issues they hold.</p>
+        <p>Unread issues and notifications are marked with a dot, with “Mark all as read”. Add watchers right from the issue.</p>
+        <p>More reliable notifications: checks every 5 minutes, keeps running in the background, and checks right after waking from sleep.</p>
+      </description>
+    </release>
     <release version="1.1.1" date="2026-11-08"/>
     <release version="1.1.0" date="2026-11-07"/>
     <release version="1.0.1" date="2026-10-23"/>
