@@ -19,14 +19,63 @@ namespace Redmine {
         // до 300 задач с упоминаниями за опрос; остальное дочитывают следующие опросы (PollState.mention_since)
         private const int MENTION_PAGES = 3;
         public signal void finished (bool ok);
+        /** Почему не удалась последняя проверка (spec 18); null — удалась или ещё не было. */
+        public string? last_error { get; private set; default = null; }
+        private bool watching = false;
+        private int64 last_kick = 0;
 
         public void start () {
             var s = Prefs.get_default ().s;
-            s.changed["poll-interval"].connect (reschedule);
-            s.changed["notifications-enabled"].connect (reschedule);
+            if (!watching) {
+                watching = true;
+                s.changed["poll-interval"].connect (reschedule);
+                s.changed["notifications-enabled"].connect (reschedule);
+                watch_wakeups ();
+            }
             reschedule ();
             // первый опрос — вскоре после запуска, не мешая первой загрузке списков
             Timeout.add_seconds (20, () => { run.begin (); return Source.REMOVE; });
+        }
+
+        /**
+         * Таймер GLib стоит, пока компьютер спит: проверка сразу после сна (logind PrepareForSleep(false))
+         * и при появлении сети (GNetworkMonitor), не чаще раза в минуту.
+         */
+        private void watch_wakeups () {
+            Bus.get.begin (BusType.SYSTEM, null, (o, r) => {
+                try {
+                    Bus.get.end (r).signal_subscribe ("org.freedesktop.login1", "org.freedesktop.login1.Manager", "PrepareForSleep",
+                        "/org/freedesktop/login1", null, DBusSignalFlags.NONE, (c, sender, path, iface, name, args) => {
+                            bool going;
+                            args.get ("(b)", out going);
+                            if (!going) kick ();
+                        });
+                } catch (Error e) {
+                    debug ("logind: %s", e.message);
+                }
+            });
+            var nm = NetworkMonitor.get_default ();
+            bool was = nm.network_available;
+            nm.notify["network-available"].connect (() => {
+                if (nm.network_available && !was) kick ();
+                was = nm.network_available;
+            });
+        }
+
+        private void kick () {
+            var now = now_ms ();
+            if (now - last_kick < 60000 || App.get ().session == null) return;
+            last_kick = now;
+            reschedule ();
+            run.begin ();
+        }
+
+        /** Причина для «Последняя проверка»: нет связи, капча, код ответа сервера. */
+        public static string poll_reason (Error e) {
+            var c = error_code (e);
+            if (c == 0) return _("No connection");
+            if (c >= 300) return _("Server replied %d").printf (c);
+            return e.message;
         }
 
         public void stop () {
@@ -79,8 +128,10 @@ namespace Redmine {
                 p.s.set_int64 ("last-check", now);
                 debug ("poll ok: events=%u new=%u", entries.length, fresh.length);
                 ok = true;
+                last_error = null;
             } catch (Error e) {
                 debug ("poll failed: %s", e.message);
+                last_error = poll_reason (e);
             }
             running = false;
             finished (ok);
@@ -650,7 +701,7 @@ namespace Redmine {
             PollState st;
             var now = now_ms ();
             var entries = yield collect (s, now - 7 * DAY_MS, now, out st);
-            s.notifs.append_all (entries, false);
+            s.notifs.append_all (entries);
             s.notifs.mark_backfilled ();
         }
     }

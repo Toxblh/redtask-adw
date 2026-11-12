@@ -280,10 +280,6 @@ namespace Redmine {
                 return 0;
             }
         }
-        public bool unread (GenericSet<string> keys) {
-            foreach (var e in entries) if (keys.contains (e.key)) return true;
-            return false;
-        }
     }
 
     public class NotifDay : Object {

@@ -1,4 +1,4 @@
-/* Колокольчик: история уведомлений — Лента или По задачам, фильтр по группам, непрочитанное, отключение задачи/проекта. */
+/* Колокольчик: история уведомлений — Лента или По задачам, фильтр по группам, непрочитанное (spec 19), отключение задачи/проекта. */
 namespace Redmine {
 
     public class NotificationsSection : Adw.Bin, Section {
@@ -9,7 +9,7 @@ namespace Redmine {
         private StateView state;
         private Adw.ToggleGroup view_mode;
         private Gtk.DropDown group_filter;
-        private GenericSet<string> unread = new GenericSet<string> (str_hash, str_equal);
+        private Gtk.Button mark_all;
         private bool backfilling = false;
         private ulong changed_id = 0;
         private Session? bound = null;
@@ -31,6 +31,10 @@ namespace Redmine {
             group_filter.notify["selected"].connect (queue_render);
             top.append (group_filter);
             box.append (top);
+            mark_all = new Gtk.Button.with_label (_("Mark All as Read")) { halign = Gtk.Align.END, margin_end = 12, visible = false };
+            mark_all.add_css_class ("flat");
+            mark_all.clicked.connect (() => ReadState.get_default ().mark_all ());
+            box.append (mark_all);
 
             // виртуальный список: из 500 событий виджеты строятся только около видимой области
             var list = lazy_list (store);
@@ -40,28 +44,22 @@ namespace Redmine {
             box.append (state);
             child = box;
             map.connect (bind_session);
+            ReadState.get_default ().changed.connect (() => { if (get_mapped ()) queue_render (); });
         }
 
-        /** Счётчик непрочитанного на значке раздела — от истории текущей учётки. */
         private void bind_session () {
             var s = App.get ().session;
             if (s == null || s == bound) return;
             if (bound != null && changed_id != 0) bound.notifs.disconnect (changed_id);
             bound = s;
-            changed_id = s.notifs.changed.connect (() => {
-                if (!get_mapped ()) win_of (this)?.set_unread (s.notifs.unread_count ());
-                else queue_render ();
-            });
-            win_of (this)?.set_unread (s.notifs.unread_count ());
+            changed_id = s.notifs.changed.connect (() => { if (get_mapped ()) queue_render (); });
         }
 
+        /** Открытие списка ничего не помечает (spec 19.2): прочитанным уведомление делает открытие задачи. */
         public void shown () {
             var s = App.get ().session;
             if (s == null) return;
             bind_session ();
-            // открытие колокольчика: подсветить новое и пометить всё прочитанным
-            foreach (var k in s.notifs.take_unread ().get_values ()) unread.add (k);
-            win_of (this)?.set_unread (0);
             queue_render ();
             if (s.notifs.needs_backfill () && !backfilling) backfill.begin (s);
         }
@@ -73,7 +71,6 @@ namespace Redmine {
             App.get ().poller.run.begin ((o, r) => {
                 var ok = App.get ().poller.run.end (r);
                 refreshing = false;
-                foreach (var k in s.notifs.take_unread ().get_values ()) unread.add (k);
                 queue_render ();
                 if (!ok) win_of (this)?.toast (_("Could not check for notifications"));
             });
@@ -94,7 +91,7 @@ namespace Redmine {
             queue_render ();
         }
 
-        /** Несколько поводов подряд (показ, take_unread → changed) — одна перерисовка. */
+        /** Несколько поводов подряд (показ, changed) — одна перерисовка. */
         private void queue_render () {
             if (render_id != 0) return;
             render_id = Idle.add (() => { render_id = 0; render (); return Source.REMOVE; });
@@ -127,6 +124,7 @@ namespace Redmine {
             var s = App.get ().session;
             if (s == null) return;
             var all = s.notifs.load ();
+            mark_all.visible = unread_notifications (all) > 0;
             var shown = new GenericArray<NotifEntry> ();
             foreach (var e in all) if (passes (e)) shown.add (e);
             var rows = new Object[0];
@@ -192,17 +190,15 @@ namespace Redmine {
             return row;
         }
 
-        private Gtk.Widget unread_dot (bool on) {
-            var d = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) { valign = Gtk.Align.CENTER, visible = on };
-            d.add_css_class ("unread-dot");
-            d.update_property (Gtk.AccessibleProperty.LABEL, _("New"), -1);
-            return d;
-        }
-
         private Gtk.Widget entry_row (NotifEntry e) {
             var b = base_row (Gtk.Orientation.HORIZONTAL, 10, e.issue_id, e.subject, e.project_id, e.project);
             b.margin_top = 6; b.margin_bottom = 6;
             b.margin_start = 4; b.margin_end = 4;
+            var unread = notif_unread (e);
+            // точка слева: место под неё есть и у прочитанных — строки не прыгают
+            var dot = unread_dot (true);
+            dot.opacity = unread ? 1 : 0;
+            b.append (dot);
             if (e.avatar_user_id != 0) b.append (Avatars.make (e.avatar_user_id, e.author, 32));
             else {
                 var icon = new Gtk.Image.from_icon_name (category_icon (e.type)) { pixel_size = 20, width_request = 32, valign = Gtk.Align.START };
@@ -211,13 +207,12 @@ namespace Redmine {
             var col = new Gtk.Box (Gtk.Orientation.VERTICAL, 2) { hexpand = true };
             var head = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
             var t = new Gtk.Label ("#%d %s".printf (e.issue_id, e.subject)) { xalign = 0, ellipsize = Pango.EllipsizeMode.END, hexpand = true };
-            t.add_css_class ("heading");
+            if (unread) t.add_css_class ("heading");
             head.append (t);
             var tm = new Gtk.Label (new DateTime.from_unix_local (e.at / 1000).format ("%H:%M"));
             tm.add_css_class ("dim-label");
             tm.add_css_class ("caption");
             head.append (tm);
-            head.append (unread_dot (unread.contains (e.key)));
             col.append (head);
             foreach (var l in e.lines) {
                 var ll = new Gtk.Label (l) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, lines = 3, ellipsize = Pango.EllipsizeMode.END };
@@ -255,11 +250,15 @@ namespace Redmine {
             var col = base_row (Gtk.Orientation.VERTICAL, 4, g.issue_id, e.subject, e.project_id, e.project);
             col.margin_top = 8; col.margin_bottom = 8;
             col.margin_start = 6; col.margin_end = 6;
+            bool unread = false;
+            foreach (var x in g.entries) if (notif_unread (x)) unread = true;
             var head = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+            var dot = unread_dot (true);
+            dot.opacity = unread ? 1 : 0;
+            head.append (dot);
             var t = new Gtk.Label ("#%d %s".printf (g.issue_id, e.subject)) { xalign = 0, wrap = true, lines = 2, ellipsize = Pango.EllipsizeMode.END, hexpand = true };
-            t.add_css_class ("heading");
+            if (unread) t.add_css_class ("heading");
             head.append (t);
-            head.append (unread_dot (g.unread (unread)));
             col.append (head);
             // что происходило: значки категорий без повторов; кто: аватары участников
             var meta = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
@@ -286,5 +285,14 @@ namespace Redmine {
             col.append (last);
             return col;
         }
+    }
+
+    /** Уведомление непрочитано (spec 19.1): его время новее рубежа и просмотра задачи. */
+    public bool notif_unread (NotifEntry e) { return ReadState.get_default ().unread_at (e.issue_id, e.at); }
+
+    public int unread_notifications (GenericArray<NotifEntry> all) {
+        int n = 0;
+        foreach (var e in all) if (notif_unread (e)) n++;
+        return n;
     }
 }

@@ -101,6 +101,30 @@ namespace Redmine {
         return b;
     }
 
+    /** Точка акцента «непрочитано» (spec 19.2). */
+    public Gtk.Widget unread_dot (bool on) {
+        var d = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0) { valign = Gtk.Align.CENTER, visible = on };
+        d.add_css_class ("unread-dot");
+        d.update_property (Gtk.AccessibleProperty.LABEL, _("New"), -1);
+        return d;
+    }
+
+    /**
+     * Точка непрочитанного у номера задачи: гаснет сразу, как задачу прочитали (сигнал ReadState),
+     * пока виджет на экране — подписка живёт от map до unmap, строки не висят на сигнале вечно.
+     */
+    public Gtk.Widget issue_unread_dot (Issue i) {
+        var rs = ReadState.get_default ();
+        var d = unread_dot (rs.unread (i));
+        ulong sig = 0;
+        d.map.connect (() => {
+            d.visible = rs.unread (i);
+            if (sig == 0) sig = rs.changed.connect ((id) => { if (id == 0 || id == i.id) d.visible = rs.unread (i); });
+        });
+        d.unmap.connect (() => { if (sig != 0) rs.disconnect (sig); sig = 0; });
+        return d;
+    }
+
     /** Строка списка — раскладка карточки IssueCard с Android. */
     public class IssueRow : Gtk.ListBoxRow {
         public Issue issue;
@@ -125,6 +149,7 @@ namespace Redmine {
 
             var top = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 8);
             top.append (status_pill (i.status.name, closed));
+            top.append (issue_unread_dot (i));
             var tr = caption ("%s #%d".printf (i.tracker.name, i.id));
             tr.hexpand = true;
             tr.add_css_class ("numeric");

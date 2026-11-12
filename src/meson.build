@@ -17,6 +17,7 @@ app_sources = core_sources + demo_sources + files(
   'store/notif_store.vala',
   'store/favorites.vala',
   'store/queries.vala',
+  'store/read_state.vala',
   'notify/poller.vala',
   'ui/window.vala',
   'ui/login.vala',

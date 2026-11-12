@@ -71,6 +71,9 @@ namespace Redmine {
             sections.notify["visible-child"].connect (sync_empty);
             list_nav.notify["visible-page"].connect (sync_empty);
             Queries.get_default ().changed.connect (sync_fav_queries);
+            ReadState.get_default ().changed.connect (sync_badge);
+            // бейджи избранных запросов (spec 19.3) — при показе раздела, не чаще раза в минуту на запрос
+            sections.notify["visible-child"].connect (count_fav_badges);
             if (Environment.get_variable ("REDTASK_SHOT") != null) Shots.schedule (this);
         }
 
@@ -181,12 +184,36 @@ namespace Redmine {
         public void show_main () {
             if (App.get ().session == null) return;
             build_sections ();
+            var s = App.get ().session;
+            if (notifs_src != null) notifs_src.disconnect (notifs_sig);
+            notifs_src = s.notifs;
+            notifs_sig = s.notifs.changed.connect (sync_badge);
+            sync_badge ();
+            if (!poll_hooked) {
+                poll_hooked = true;
+                // после каждого опроса — пересчёт бейджей запросов
+                App.get ().poller.finished.connect (() => count_fav_badges ());
+            }
             root_stack.visible_child_name = "main";
             if (login_view != null) {
                 root_stack.remove (login_view);
                 login_view = null;
             }
             current_section ()?.shown ();
+        }
+
+        private NotifStore? notifs_src = null;
+        private ulong notifs_sig = 0;
+        private bool poll_hooked = false;
+
+        /** Колокольчик — число непрочитанных уведомлений (spec 19.2). */
+        private void sync_badge () {
+            var s = App.get ().session;
+            set_unread (s != null ? unread_notifications (s.notifs.load ()) : 0);
+        }
+
+        private void count_fav_badges () {
+            foreach (var q in fav_sections) q.count_unread.begin ();
         }
 
         private void add_section (Section s, string name, string title, string icon) {
@@ -245,6 +272,7 @@ namespace Redmine {
             set_unread (unread);
             sections.visible_child_name = sections.get_child_by_name (visible) != null ? visible : "mine";
             sync_narrow ();
+            count_fav_badges ();
         }
 
         private void build_sections () {

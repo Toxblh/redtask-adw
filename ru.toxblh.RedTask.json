@@ -10,7 +10,8 @@
     "--socket=wayland",
     "--socket=fallback-x11",
     "--device=dri",
-    "--talk-name=org.gnome.NautilusPreviewer"
+    "--talk-name=org.gnome.NautilusPreviewer",
+    "--system-talk-name=org.freedesktop.login1"
   ],
   "cleanup": ["/include", "/lib/pkgconfig", "/share/vala", "*.la", "*.a"],
   "modules": [

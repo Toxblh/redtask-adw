@@ -384,6 +384,18 @@ void test_demo_queries () {
     foreach (var q in jarr (all, "queries")) assert_cmpint (jint (q, "id"), CompareOperator.NE, id);
 }
 
+void test_read_state () {
+    var v = spec.get_object_member ("read_state");
+    var r = ReadMarks.from_json (v);
+    foreach (var c in objs (v.get_array_member ("cases")))
+        if (r.unread ((int) c.get_int_member ("id"), c.get_int_member ("updated_on")) != c.get_boolean_member ("unread"))
+            error ("read_state: %s", c.get_string_member ("_"));
+    var m = v.get_object_member ("mark_all");
+    r.mark_all (m.get_int_member ("now"));
+    assert_cmpint ((int) (r.baseline - m.get_int_member ("expected_baseline")), CompareOperator.EQ, 0);
+    assert_cmpuint (r.seen.size (), CompareOperator.EQ, m.get_object_member ("expected_seen").get_size ());
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -396,7 +408,7 @@ int main (string[] args) {
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
     string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
-        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels", "filter_catalog", "filter_params", "query_form", "query_saved" };
+        "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels", "filter_catalog", "filter_params", "query_form", "query_saved", "read_state" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
     Test.add_func ("/spec/status_kind", test_status_kind);
     Test.add_func ("/spec/note_link", test_note_link);
@@ -426,5 +438,6 @@ int main (string[] args) {
     Test.add_func ("/spec/query_saved", test_query_saved);
     Test.add_func ("/spec/demo_server", test_demo_server);
     Test.add_func ("/spec/demo_queries", test_demo_queries);
+    Test.add_func ("/spec/read_state", test_read_state);
     return Test.run ();
 }

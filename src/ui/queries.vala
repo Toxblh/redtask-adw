@@ -761,11 +761,77 @@ namespace Redmine {
         public Adw.ViewStackPage page { get; set; }
         public bool refreshing { get; set; }
         private IssueList list;
+        private IssueQuery iq;
+        /** Непрочитанные задачи запроса (spec 19.3): открыли одну — бейдж меньше сразу. */
+        private GenericSet<int> unread = new GenericSet<int> (direct_hash, direct_equal);
+        private int64 counted_at = 0;
+        private bool counting = false;
+        private ulong sig = 0;
+        public const int CAP = 100;
 
         public QuerySection (IssueQuery iq) {
+            this.iq = iq;
             list = new IssueList (ListKind.QUERY, iq.project_id, iq);
             list.bind_property ("refreshing", this, "refreshing", BindingFlags.SYNC_CREATE);
             child = list;
+            sig = ReadState.get_default ().changed.connect ((id) => {
+                if (id == 0) unread.remove_all ();
+                else if (!unread.remove (id)) return;
+                sync_badge ();
+            });
+        }
+
+        public override void dispose () {
+            if (sig != 0) ReadState.get_default ().disconnect (sig);
+            sig = 0;
+            base.dispose ();
+        }
+
+        private void sync_badge () {
+            // ponytail: бейдж ViewStackPage — только число; 100 и больше — это «99+» (счёт останавливается на 100)
+            if (page != null) page.badge_number = unread.length;
+        }
+
+        /**
+         * Счёт непрочитанных: тот же запрос по updated_on:desc, страницы по 100 — до задачи не новее рубежа или 100 непрочитанных.
+         * Не чаще раза в минуту на запрос.
+         */
+        public async void count_unread () {
+            var s = App.get ().session;
+            var now = now_ms ();
+            if (s == null || counting || now - counted_at < 60000) return;
+            counting = true;
+            counted_at = now;
+            var rs = ReadState.get_default ();
+            var q = iq.copy ();
+            var p = new Query ();
+            if (iq.params != null) for (int k = 0; k < iq.params.keys.length; k++) if (iq.params.keys[k] != "sort") p.add (iq.params.keys[k], iq.params.vals[k]);
+            p.add ("sort", "updated_on:desc");
+            q.params = p;
+            q.limit = 100;
+            var found = new GenericSet<int> (direct_hash, direct_equal);
+            try {
+                // ponytail: потолок 10 страниц — дальше рубеж почти наверняка уже пройден
+                for (int n = 0; n < 10; n++) {
+                    var page_ = yield s.api.issues (q);
+                    bool stop = page_.issues.length < 100;
+                    foreach (var i in page_.issues) {
+                        if (parse_iso_ms (i.updated_on) <= rs.baseline || found.length >= CAP) { stop = true; break; }
+                        if (rs.unread (i)) found.add (i.id);
+                    }
+                    q.offset += page_.issues.length;
+                    if (stop || q.offset >= page_.total) break;
+                }
+            } catch (Error e) {
+                debug ("query badge: %s", e.message);
+                counting = false;
+                counted_at = 0;
+                return;
+            }
+            counting = false;
+            if (App.get ().session != s) return;
+            unread = found;
+            sync_badge ();
         }
 
         public void shown () { list.shown (); }

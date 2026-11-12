@@ -83,31 +83,11 @@ namespace Redmine {
             return res;
         }
 
-        public GenericSet<string> unread () {
-            var res = new GenericSet<string> (str_hash, str_equal);
-            string text;
-            try {
-                if (FileUtils.get_contents (p ("notifications.unread"), out text))
-                    foreach (var l in text.split ("\n")) if (l != "") res.add (l);
-            } catch (Error e) {}
-            return res;
-        }
-
-        public int unread_count () { return (int) unread ().length; }
-
-        /** Открытие колокольчика: отдаёт непрочитанное и помечает всё прочитанным. */
-        public GenericSet<string> take_unread () {
-            var u = unread ();
-            FileUtils.unlink (p ("notifications.unread"));
-            changed ();
-            return u;
-        }
-
         /**
          * Дописывает записи и возвращает только действительно новые: повтор опроса и бэкфилл не дублируют
-         * ни историю, ни системные уведомления. unread = false — бэкфилл. Сбой записи пробрасывается.
+         * ни историю, ни системные уведомления. Непрочитанность — по ReadState (spec 19). Сбой записи пробрасывается.
          */
-        public GenericArray<NotifEntry> append_all (GenericArray<NotifEntry> entries, bool unread = true) throws Error {
+        public GenericArray<NotifEntry> append_all (GenericArray<NotifEntry> entries) throws Error {
             var old = load ();
             var known = new GenericSet<string> (str_hash, str_equal);
             foreach (var e in old) known.add (e.key);
@@ -119,13 +99,6 @@ namespace Redmine {
             foreach (var e in fresh) all.add (e);
             all.sort ((a, b) => a.at > b.at ? -1 : (a.at < b.at ? 1 : 0));
             if (all.length > CAP) all.remove_range (CAP, all.length - CAP);
-            // непрочитанное — до истории: сбой оставляет событие «неизвестным», и повтор опроса покажет его
-            if (unread) {
-                var sb = new StringBuilder ();
-                foreach (var k in this.unread ().get_values ()) sb.append (k + "\n");
-                foreach (var e in fresh) sb.append (e.key + "\n");
-                replace (p ("notifications.unread"), sb.str);
-            }
             var arr = new Json.Array ();
             foreach (var e in all) arr.add_object_element (e.to_json ());
             var n = new Json.Node (Json.NodeType.ARRAY);

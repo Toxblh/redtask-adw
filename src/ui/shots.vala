@@ -18,6 +18,7 @@ namespace Redmine {
  * REDTASK_SHOT_QUERIES=pid — экран запросов проекта (0 — все); REDTASK_SHOT_SAVEQ=имя — до этого сохранить свой запрос
  *   (у себя и на сервер, в демо) и отметить его «★»; REDTASK_SHOT_FAVQ=1 — «★» первому серверному запросу.
  * REDTASK_SHOT_FILTER=pid — экран «Фильтр» с тремя условиями; REDTASK_SHOT_FILTER_DIALOG=cond|editN|save — диалог нового условия, правки N-го или сохранения.
+ * REDTASK_SHOT_UNREAD=часы — рубеж прочитанного на столько часов назад (spec 19): свежее — непрочитано.
  * REDTASK_SHOT_DEMO=1 — демо-режим (spec 6) вместо входа; вход в настройках и связке ключей не меняется.
      */
     namespace Shots {
@@ -38,6 +39,11 @@ namespace Redmine {
                     Prefs.get_default ().s.set_value (kv.substring (0, eq), Variant.parse (null, kv.substring (eq + 1)));
                 } catch (Error e) { warning ("shot: %s: %s", kv, e.message); }
             }
+            var unread_h = Environment.get_variable ("REDTASK_SHOT_UNREAD");
+            if (unread_h != null) Timeout.add (300, () => {
+                ReadState.get_default ().rewind (now_ms () - int.parse (unread_h) * HOUR_MS);
+                return Source.REMOVE;
+            });
             var text_file = Environment.get_variable ("REDTASK_SHOT_TEXT");
             if (text_file != null) Timeout.add (delay / 2, () => {
                 try {

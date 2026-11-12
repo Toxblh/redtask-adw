@@ -741,3 +741,61 @@ namespace Redmine {
         return res;
     }
 }
+
+namespace Redmine {
+    /**
+     * Прочитано (spec 19.1, набор read_state): рубеж baseline и просмотры seen (id задачи → updated_on при просмотре), мс.
+     * Непрочитана: updated_on > baseline и > seen[id]; уведомление — по своему времени так же.
+     */
+    public class ReadMarks {
+        public const int CAP = 5000;
+        public int64 baseline = 0;
+        public HashTable<int, int64?> seen = new HashTable<int, int64?> (direct_hash, direct_equal);
+
+        public bool unread (int id, int64 updated) {
+            if (updated <= baseline) return false;
+            var s = seen[id];
+            return s == null || updated > s;
+        }
+
+        /** Свежая версия задачи пришла с сервера и показана. */
+        public void view (int id, int64 updated) {
+            if (updated <= baseline) { seen.remove (id); return; }
+            seen[id] = updated;
+            if (seen.size () > CAP) prune ();
+        }
+
+        public void mark_all (int64 now) {
+            baseline = now;
+            seen.remove_all ();
+        }
+
+        /** Не новее рубежа — вон; сверх CAP — старейшие (по updated_on) вон. */
+        public void prune () {
+            seen.foreach_remove ((k, v) => v <= baseline);
+            if (seen.size () <= CAP) return;
+            var vals = new GenericArray<int64?> ();
+            foreach (var v in seen.get_values ()) vals.add (v);
+            vals.sort ((a, b) => a < b ? 1 : (a > b ? -1 : 0));
+            var edge = vals[CAP - 1];
+            seen.foreach_remove ((k, v) => v < edge);
+        }
+
+        public Json.Object to_json () {
+            var o = new Json.Object ();
+            o.set_int_member ("baseline", baseline);
+            var s = new Json.Object ();
+            foreach (var k in seen.get_keys ()) s.set_int_member (k.to_string (), seen[k]);
+            o.set_object_member ("seen", s);
+            return o;
+        }
+
+        public static ReadMarks from_json (Json.Object o) {
+            var r = new ReadMarks ();
+            r.baseline = o.has_member ("baseline") ? o.get_int_member ("baseline") : 0;
+            var s = jobj (o, "seen");
+            if (s != null) foreach (var k in s.get_members ()) r.seen[int.parse (k)] = s.get_int_member (k);
+            return r;
+        }
+    }
+}

@@ -105,6 +105,7 @@ namespace Redmine {
             var last = new Adw.ActionRow () { title = _("Last check") };
             update_last (last);
             p.s.changed["last-check"].connect (() => update_last (last));
+            App.get ().poller.notify["last-error"].connect (() => update_last (last));
             var now = new Gtk.Button.with_label (_("Check Now")) { valign = Gtk.Align.CENTER };
             now.clicked.connect (() => {
                 now.sensitive = false;
@@ -198,7 +199,9 @@ namespace Redmine {
 
         private void update_last (Adw.ActionRow r) {
             var ms = Prefs.get_default ().s.get_int64 ("last-check");
-            r.subtitle = ms == 0 ? _("never") : new DateTime.from_unix_local (ms / 1000).format ("%-d %b, %H:%M").strip ();
+            var t = ms == 0 ? _("never") : new DateTime.from_unix_local (ms / 1000).format ("%-d %b, %H:%M").strip ();
+            var err = App.get ().poller.last_error;
+            r.subtitle = Markup.escape_text (err != null ? t + "\n" + _("Last check failed: %s").printf (err) : t);
         }
 
         private string? category_hint (string type) {

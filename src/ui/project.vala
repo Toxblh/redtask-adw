@@ -637,7 +637,10 @@ namespace Redmine {
                 var num = new Gtk.Label ("%s #%d".printf (i.tracker.name, i.id)) { xalign = 0, ellipsize = Pango.EllipsizeMode.END };
                 num.add_css_class ("caption");
                 num.add_css_class ("dim-label");
-                b.append (num);
+                var nb = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 6);
+                nb.append (issue_unread_dot (i));
+                nb.append (num);
+                b.append (nb);
                 var subj = new Gtk.Label (i.subject) { xalign = 0, wrap = true, wrap_mode = Pango.WrapMode.WORD_CHAR, lines = 3, ellipsize = Pango.EllipsizeMode.END };
                 if (i.status_closed) subj.add_css_class ("closed-issue");
                 b.append (subj);

@@ -204,6 +204,8 @@ namespace Redmine {
                     fresh.o.set_member ("_cf_labels", issue.o.get_member ("_cf_labels").copy ());
                 issue = fresh;
                 s.cache.save ("issue-%d".printf (issue_id), obj_node (fresh.o));
+                // просмотр (spec 19.1) — только свежая версия с сервера
+                ReadState.get_default ().viewed (fresh);
                 cached_perms (s);
                 render ();
             } catch (Error e) {

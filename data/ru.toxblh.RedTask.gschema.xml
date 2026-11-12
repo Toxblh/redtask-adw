@@ -15,9 +15,9 @@
     <key name="version-view" type="s"><default>'list'</default><summary>Экран вехи: list или board</summary></key>
 
     <key name="notifications-enabled" type="b"><default>true</default></key>
-    <key name="poll-interval" type="i"><default>15</default><summary>Интервал проверки, мин</summary></key>
+    <key name="poll-interval" type="i"><default>5</default><summary>Интервал проверки, мин</summary></key>
     <key name="last-check" type="x"><default>0</default></key>
-    <key name="run-in-background" type="b"><default>false</default>
+    <key name="run-in-background" type="b"><default>true</default>
       <summary>Проверять уведомления при закрытом окне и запускаться при входе</summary></key>
     <key name="notif-muted" type="as"><default>['other', 'new_issue']</default><summary>Выключенные категории</summary></key>
     <key name="notif-scope-assigned" type="b"><default>true</default></key>

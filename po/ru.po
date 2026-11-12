@@ -1577,3 +1577,12 @@ msgstr "_Запросы"
 
 msgid "The query is kept on this device and sent to the server through the website session."
 msgstr "Запрос хранится на устройстве и отправляется на сервер через вход на сайте."
+
+msgid "Mark All as Read"
+msgstr "Пометить всё прочитанным"
+
+msgid "Server replied %d"
+msgstr "Сервер ответил %d"
+
+msgid "Last check failed: %s"
+msgstr "Не удалась: %s"

@@ -112,7 +112,7 @@ namespace Redmine {
 
         /** Категория файла (или ключа) кэша; −1 — не кэш: избранное и недавние в поиске не считаем и не стираем. */
         private static int kind_of (string name) {
-            if (name.has_prefix ("favorite-ids") || name.has_prefix ("recent-search") || name.has_prefix ("queries-")) return -1;
+            if (name.has_prefix ("favorite-ids") || name.has_prefix ("recent-search") || name.has_prefix ("queries-") || name.has_prefix ("read-state")) return -1;
             if (name.has_prefix ("avatar-")) return 0;
             if (name.has_prefix ("thumb-") || name.has_prefix ("nothumb-") || name.has_prefix ("notif-thumb-")) return 1;
             if (name.has_prefix ("att-")) return 2;
