@@ -428,7 +428,7 @@ namespace Redmine {
             share.append (_("Copy Issue _Number"), "issue.copy-number");
             share.append (_("Copy _Link"), "issue.copy-link");
             share.append (_("S_hare"), "issue.share");
-            share.append (_("Open in _Browser"), "issue.open-browser");
+            if (!DemoServer.is_demo (App.get ().session?.server ?? "")) share.append (_("Open in _Browser"), "issue.open-browser");
             m.append_section (null, share);
             var other = new Menu ();
             other.append (_("_Favorite"), "issue.favorite");

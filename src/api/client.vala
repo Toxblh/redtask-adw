@@ -38,26 +38,6 @@ namespace Redmine {
         yield;
     }
 
-    /** Параметры запроса: пары «ключ, значение»; повтор ключа (f[]) допустим, null-значение пропускается. */
-    public class Query {
-        public GenericArray<string> keys = new GenericArray<string> ();
-        public GenericArray<string> vals = new GenericArray<string> ();
-        public Query add (string k, string? v) {
-            if (v != null) { keys.add (k); vals.add (v); }
-            return this;
-        }
-        public string encode () {
-            var sb = new StringBuilder ();
-            for (int i = 0; i < keys.length; i++) {
-                if (i > 0) sb.append_c ('&');
-                sb.append (Uri.escape_string (keys[i], "[]", false));
-                sb.append_c ('=');
-                sb.append (Uri.escape_string (vals[i], null, false));
-            }
-            return sb.str;
-        }
-    }
-
     public class IssueQuery {
         public int project_id = 0;
         public bool assigned_to_me = false;
@@ -91,7 +71,8 @@ namespace Redmine {
 
     public class Resp {
         public Bytes body;
-        public Soup.Message msg;
+        public uint code;
+        public Soup.MessageHeaders headers;
         public string text () {
             if (body.get_size () == 0) return "";
             // данные Bytes не оканчиваются нулём — копируем ровно size байт
@@ -113,12 +94,15 @@ namespace Redmine {
         private bool custom_fields_forbidden = false;
         /** Сервер отверг фильтр по комментариям (старый Redmine): до пересоздания клиента его больше не спрашиваем. */
         public bool mention_filter_unsupported = false;
+        /** Демо-режим (spec 6): ответы — из DemoServer, в сеть не уходит ни один запрос. */
+        public bool demo { get; private set; }
 
         public Client (string base_url, string api_key) throws Error {
             this.base_url = base_url.has_suffix ("/") ? base_url.substring (0, base_url.length - 1) : base_url;
             this.api_key = api_key.strip ();
             base_uri = Uri.parse (this.base_url, UriFlags.NONE);
             if (base_uri.get_host () == null || base_uri.get_host () == "") throw http_error (0, _("Bad server address"));
+            demo = DemoServer.is_demo (this.base_url);
             // 6 соединений, как у браузера (по умолчанию 2): страницы проектов качаются параллельно
             session = (Soup.Session) Object.new (typeof (Soup.Session), "max-conns-per-host", 6);
             session.timeout = 40;
@@ -159,6 +143,13 @@ namespace Redmine {
          */
         public async Resp raw (string method, string u, string accept, Bytes? body, string? body_type,
                                bool html_auth = false, Cancellable? c = null) throws Error {
+            if (demo) {
+                var d = DemoServer.handle (method, u, body);
+                var hd = new Soup.MessageHeaders (Soup.MessageHeadersType.RESPONSE);
+                hd.replace ("Content-Type", d.type);
+                hd.replace ("X-Request-Id", "demo");
+                return new Resp () { body = d.body, code = d.code, headers = hd };
+            }
             string target = u;
             for (int hop = 0; hop < 4; hop++) {
                 for (int attempt = 0; ; attempt++) {
@@ -194,7 +185,7 @@ namespace Redmine {
                         } catch (Error e) { throw http_error ((int) code, "Bad redirect"); }
                         break; // следующий hop
                     }
-                    return new Resp () { body = resp, msg = msg };
+                    return new Resp () { body = resp, code = msg.status_code, headers = msg.response_headers };
                 }
             }
             throw http_error (0, "Too many redirects");
@@ -203,12 +194,11 @@ namespace Redmine {
         private async string exec (string method, string u, Json.Node? payload, Cancellable? c = null) throws Error {
             Bytes? body = payload != null ? new Bytes (json_to_string (payload).data) : null;
             var r = yield raw (method, u, "application/json", body, "application/json", false, c);
-            var msg = r.msg;
             var text = r.text ();
-            var ct = msg.response_headers.get_content_type (null);
-            var code = msg.status_code;
+            var ct = r.headers.get_content_type (null);
+            var code = r.code;
             var waf = WafGate.get_default ();
-            bool captcha = waf_challenge ("application/json", code, ct, msg.response_headers.get_one ("X-Request-Id"));
+            bool captcha = waf_challenge ("application/json", code, ct, r.headers.get_one ("X-Request-Id"));
             if (waf.blocked != captcha) waf.blocked = captcha;
             if (captcha) throw http_error (200, _("Server asks for a captcha (Security check)"));
             // страница логина вместо JSON: для записи это НЕ успех — иначе комментарий молча пропадёт
@@ -697,12 +687,11 @@ namespace Redmine {
         /** Скачивает содержимое (вложения) с авторизацией ключом. */
         public async Bytes download (string u, Cancellable? c = null) throws Error {
             var r = yield raw ("GET", own (u), "*/*", null, null, false, c);
-            var msg = r.msg;
             var b = r.body;
-            if (msg.status_code < 200 || msg.status_code >= 300) throw http_error ((int) msg.status_code, "HTTP %u".printf (msg.status_code));
-            var ct = msg.response_headers.get_content_type (null);
+            if (r.code < 200 || r.code >= 300) throw http_error ((int) r.code, "HTTP %u".printf (r.code));
+            var ct = r.headers.get_content_type (null);
             // повторы WAF исчерпаны: страница проверки вместо файла — это сбой, а не файл
-            if (ct != null && ct.contains ("html") && msg.response_headers.get_one ("X-Request-Id") == null && !u.has_suffix (".html"))
+            if (ct != null && ct.contains ("html") && r.headers.get_one ("X-Request-Id") == null && !u.has_suffix (".html"))
                 throw http_error (200, _("Unexpected response from server"));
             return b;
         }
@@ -713,6 +702,13 @@ namespace Redmine {
          */
         public async Bytes? get_range (string u, string range, int64 max, out uint status) throws Error {
             status = 0;
+            if (demo) {
+                // демо Range не умеет — всё тело, как сервер без Range
+                var d = DemoServer.handle ("GET", own (u), null);
+                status = d.code;
+                if (d.code != 200) throw http_error ((int) d.code, "range: HTTP %u".printf (d.code));
+                return max > 0 && d.body.get_size () <= max ? d.body : null;
+            }
             var c = new Cancellable ();
             var msg = new Soup.Message ("GET", own (u));
             if (msg == null) throw http_error (0, _("Bad address: %s").printf (u));
@@ -761,7 +757,7 @@ namespace Redmine {
         private async Resp html_page (string path, Cancellable? c = null) throws Error {
             for (int attempt = 0; ; attempt++) {
                 var r = yield raw ("GET", url (path), "text/html", null, null, true, c);
-                if (r.msg.status_code == 200 && r.msg.response_headers.get_one ("X-Request-Id") == null && attempt < WAF_RETRIES) {
+                if (r.code == 200 && r.headers.get_one ("X-Request-Id") == null && attempt < WAF_RETRIES) {
                     yield sleep_ms (300 * (attempt + 1));
                     continue;
                 }
@@ -772,7 +768,7 @@ namespace Redmine {
         /** HTML страницы задачи (листы согласования, spec 10). */
         public async string issue_html (int id, Cancellable? c = null) throws Error {
             var r = yield html_page ("issues/%d".printf (id), c);
-            var code = r.msg.status_code;
+            var code = r.code;
             if (code != 200) throw http_error ((int) code, "issue page: HTTP %u".printf (code));
             return r.text ();
         }
@@ -780,7 +776,7 @@ namespace Redmine {
         /** Страница /people/:id (аватар, телефоны — spec 11); null — профиля нет или он закрыт. */
         public async string? people_page (int user_id, Cancellable? c = null) throws Error {
             var r = yield html_page ("people/%d".printf (user_id), c);
-            var code = r.msg.status_code;
+            var code = r.code;
             if (code == 404 || code == 401 || code == 403) return null;
             if (code < 200 || code >= 300) throw http_error ((int) code, "people: HTTP %u".printf (code));
             return r.text ();
@@ -789,10 +785,9 @@ namespace Redmine {
         /** Миниатюра вложения; null — определённое «нет» (не картинка, нет прав). */
         public async Bytes? thumbnail (int attachment_id, int size = 200, Cancellable? c = null) throws Error {
             var r = yield raw ("GET", url ("attachments/thumbnail/%d/%d".printf (attachment_id, size)), "image/*", null, null, false, c);
-            var msg = r.msg;
             var b = r.body;
-            var ct = msg.response_headers.get_content_type (null) ?? "";
-            var code = msg.status_code;
+            var ct = r.headers.get_content_type (null) ?? "";
+            var code = r.code;
             if (code >= 200 && code < 300 && ct.has_prefix ("image/")) return b;
             if (code >= 200 && code < 300 && ct.contains ("html")) throw http_error (200, _("Unexpected response from server"));
             if ((code >= 200 && code < 300) || code == 404 || code == 403 || code == 406) return null;
@@ -805,9 +800,8 @@ namespace Redmine {
         public async UploadRef upload (Bytes data, string filename, string? content_type) throws Error {
             var r = yield raw ("POST", url ("uploads.json", new Query ().add ("filename", filename)), "application/json",
                 data, "application/octet-stream");
-            var msg = r.msg;
             var text = r.text ();
-            if (msg.status_code < 200 || msg.status_code >= 300) throw http_error ((int) msg.status_code, "upload: HTTP %u".printf (msg.status_code));
+            if (r.code < 200 || r.code >= 300) throw http_error ((int) r.code, "upload: HTTP %u".printf (r.code));
             var n = json_parse (text);
             var token = n != null && n.get_node_type () == Json.NodeType.OBJECT ? jstr (jobj (n.get_object (), "upload"), "token") : "";
             if (token == "") throw http_error (200, _("Unexpected response from server"));
@@ -834,8 +828,8 @@ namespace Redmine {
             }
             if (content_url == "") return null;
             var img = yield raw ("GET", own (content_url), "image/*", null, null, false, c);
-            var ct = img.msg.response_headers.get_content_type (null) ?? "";
-            if (img.msg.status_code >= 200 && img.msg.status_code < 300 && ct.has_prefix ("image/")) return img.body;
+            var ct = img.headers.get_content_type (null) ?? "";
+            if (img.code >= 200 && img.code < 300 && ct.has_prefix ("image/")) return img.body;
             return null;
         }
     }

@@ -122,6 +122,13 @@ namespace Redmine {
 
         /** Восстановление входа: адрес — из настроек, ключ — из связки ключей. */
         public async void start_session (bool ui) {
+            if (Environment.get_variable ("REDTASK_SHOT_DEMO") != null) {
+                DemoServer.reset (DemoServer.ui_ru ());
+                try {
+                    apply_session (new Session (DemoServer.BASE, DemoServer.KEY, DemoServer.ME));
+                } catch (Error e) { warning ("demo: %s", e.message); }
+                return;
+            }
             var p = Prefs.get_default ();
             var server = p.server_url;
             string? key = null;

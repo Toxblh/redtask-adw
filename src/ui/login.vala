@@ -49,6 +49,25 @@ namespace Redmine {
             expander.child = inner;
             box.append (expander);
 
+            // демо (spec 6): обычный вход на выдуманный сервер
+            var demo_button = new Gtk.Button.with_mnemonic (_("_Try Demo")) { halign = Gtk.Align.CENTER };
+            demo_button.add_css_class ("pill");
+            demo_button.clicked.connect (() => {
+                DemoServer.reset (DemoServer.ui_ru ());
+                App.get ().login.begin (DemoServer.BASE, DemoServer.KEY, (o, r) => {
+                    try { App.get ().login.end (r); } catch (Error e) { show_error (e.message); }
+                });
+            });
+            var demo_hint = new Gtk.Label (_("No Redmine server at hand? Explore the app with sample data. Nothing is sent anywhere.")) {
+                wrap = true, justify = Gtk.Justification.CENTER,
+            };
+            demo_hint.add_css_class ("dim-label");
+            demo_hint.add_css_class ("caption");
+            var demo_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 6);
+            demo_box.append (demo_button);
+            demo_box.append (demo_hint);
+            box.append (demo_box);
+
             error_label = new Gtk.Label ("") { wrap = true, visible = false, justify = Gtk.Justification.CENTER };
             error_label.add_css_class ("error");
             box.append (error_label);
@@ -136,7 +155,7 @@ namespace Redmine {
             bool waf = msg.status_code == 200 && ct != null && ct.contains ("html") && msg.response_headers.get_one ("X-Request-Id") == null;
             if (waf && attempt < WAF_RETRIES) { yield sleep_ms (300 * (attempt + 1)); continue; }
             if (waf) throw http_error (200, _("Server asks for a captcha (Security check)"));
-            return new Resp () { body = body, msg = msg };
+            return new Resp () { body = body, code = msg.status_code, headers = msg.response_headers };
         }
     }
 
@@ -147,13 +166,14 @@ namespace Redmine {
      * уже так (поставили с другого устройства) — ничего не шлём.
      */
     public async void web_favourite (string server, int id, bool on) throws Error {
+        if (DemoServer.is_demo (server)) { DemoServer.set_favorite (id, on); return; }
         var cm = web_session ().get_cookie_manager ();
         var jar = new Soup.CookieJar ();
         foreach (unowned Soup.Cookie c in yield cm.get_cookies (server + "/", null)) jar.add_cookie (c.copy ());
         var ss = new Soup.Session () { timeout = 40, user_agent = WafGate.get_default ().browser_agent ?? new WebKit.Settings ().user_agent };
         ss.add_feature (jar);
         var page = yield web_send (ss, "GET", "%s/issues/%d".printf (server, id), "text/html", null);
-        var code = page.msg.status_code;
+        var code = page.code;
         if (code == 404 || code == 403) throw http_error ((int) code, code == 404 ? _("Not found") : _("Forbidden"));
         if (code != 200) throw no_web_session (); // 302 на /login
         var html = page.text ();
@@ -163,7 +183,7 @@ namespace Redmine {
         if ((state == 1) != on) {
             var r = yield web_send (ss, on ? "POST" : "DELETE",
                 "%s/favourites/fav?object_id=%d&object_type=issue".printf (server, id), "text/javascript", token);
-            code = r.msg.status_code;
+            code = r.code;
             if (code == 401 || code == 422 || (code >= 300 && code < 400)) throw no_web_session ();
             if (code < 200 || code >= 300) throw http_error ((int) code, "HTTP %u".printf (code));
         }

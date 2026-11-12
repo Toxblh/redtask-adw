@@ -18,11 +18,15 @@ case "$1" in
   test) run_sdk '[ -d build ] || meson setup build --prefix=/app; meson test -C build --print-errorlogs' ;;
   run) shift; run_sdk "ninja -C build >/dev/null && $LOCALES && exec ./build/src/redtask $*" ;;
   shell) run_sdk 'exec bash' ;;
-  # tools/dev.sh shot имя ШxВ [VAR=знач…] — PNG окна в build/shots/имя.png (ключ — из ~/.env-redmine).
+  # tools/dev.sh shot имя ШxВ [VAR=знач…] — PNG окна в build/shots/имя.png (ключ — из ~/.env-redmine;
+  # с REDTASK_SHOT_DEMO=1 — демо-режим, ключ и адрес рабочего сервера в песочницу не передаются).
   # Безголово: окно живёт в своём mutter --headless (своя шина D-Bus, свой сокет Wayland, без X11) —
   # на экране пользователя ничего не появляется.
   shot) name=$2; size=$3; shift 3; mkdir -p build/shots
-    . ~/.env-redmine
+    case " $* " in
+      *" REDTASK_SHOT_DEMO="*) dev="" ;;
+      *) . ~/.env-redmine; dev="--env=REDTASK_DEV_KEY=$REDMINE --env=REDTASK_DEV_SERVER=https://my.basealt.space" ;;
+    esac
     extra=""; for kv in "$@"; do extra="$extra --env=$kv"; done
     export WAYLAND_DISPLAY=redtask-shot-$$
     unset DISPLAY
@@ -31,7 +35,7 @@ case "$1" in
     trap 'kill $(cat $pidf) 2>/dev/null; rm -f $pidf' EXIT
     for i in $(seq 100); do [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break; sleep 0.1; done
     SOCKETS="--socket=wayland --nosocket=x11 --nosocket=fallback-x11"
-    DEV_ENV="--env=REDTASK_DEV_KEY=$REDMINE --env=REDTASK_DEV_SERVER=https://my.basealt.space --env=REDTASK_SHOT=$PWD/build/shots/$name.png --env=REDTASK_SHOT_SIZE=$size $extra" \
+    DEV_ENV="$dev --env=REDTASK_SHOT=$PWD/build/shots/$name.png --env=REDTASK_SHOT_SIZE=$size $extra" \
       run_sdk "ninja -C build >/dev/null && $LOCALES && exec ./build/src/redtask" ;;
   *) echo "usage: $0 build|test|run|shell"; exit 1 ;;
 esac

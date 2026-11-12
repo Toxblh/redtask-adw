@@ -15,6 +15,7 @@ namespace Redmine {
      * REDTASK_SHOT_PRIVATE=1 — с REDTASK_SHOT_TYPE: включить «Приватная заметка» в диалоге.
      * REDTASK_SHOT_SWITCH=N — щелчок по N-му разделу боковой панели после остальных шагов.
  * REDTASK_SHOT_CLEAR=N — с REDTASK_SHOT_ACTION=app.preferences: очистить N-ю категорию кэша (5 — всё).
+ * REDTASK_SHOT_DEMO=1 — демо-режим (spec 6) вместо входа; вход в настройках и связке ключей не меняется.
      */
     namespace Shots {
         private Gtk.Widget? text_shot = null;

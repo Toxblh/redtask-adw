@@ -674,6 +674,7 @@ namespace Redmine {
             hb.pack_start (refresh_button (this, () => refresh ()));
             var web = new Gtk.Button.from_icon_name ("web-browser-symbolic") { tooltip_text = _("Open in Browser") };
             web.clicked.connect (() => new Gtk.UriLauncher (web_url ()).launch.begin (win_of (this), null));
+            web.visible = !DemoServer.is_demo (App.get ().session?.server ?? "");
             hb.pack_end (web);
             box = page_box ();
             state = new StateView (scroll_column (box));

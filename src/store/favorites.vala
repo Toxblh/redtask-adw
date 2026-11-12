@@ -101,7 +101,8 @@ namespace Redmine {
          */
         private async void migrate (Session s) {
             var p = Prefs.get_default ();
-            if (migrating || p.s.get_boolean ("favorites-migrated")) return;
+            // демо — не учётка: прежнее локальное избранное ждёт настоящий вход
+            if (migrating || s.api.demo || p.s.get_boolean ("favorites-migrated")) return;
             migrating = true;
             bool done = true;
             foreach (var id in fav_to_migrate (p.favorites (), ids)) {

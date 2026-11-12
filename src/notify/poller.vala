@@ -497,8 +497,8 @@ namespace Redmine {
          * открыть задачу на самом новом комментарии пачки, кнопка «Не уведомлять по задаче».
          */
         public async void post (GenericArray<NotifEntry> fresh, NotifFilter f) {
-            if (fresh.length == 0) return;
             var app = App.get ();
+            if (fresh.length == 0 || app.session?.api.demo == true) return;
             var by_issue = new HashTable<int, GenericArray<NotifEntry>> (direct_hash, direct_equal);
             int[] order = {};
             fresh.sort ((a, b) => a.at > b.at ? 1 : (a.at < b.at ? -1 : 0));

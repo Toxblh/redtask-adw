@@ -1,6 +1,26 @@
 /* Даты, часы и прочие мелочи без зависимостей от GTK — покрыты tests/. */
 namespace Redmine {
 
+    /** Параметры запроса: пары «ключ, значение»; повтор ключа (f[]) допустим, null-значение пропускается. */
+    public class Query {
+        public GenericArray<string> keys = new GenericArray<string> ();
+        public GenericArray<string> vals = new GenericArray<string> ();
+        public Query add (string k, string? v) {
+            if (v != null) { keys.add (k); vals.add (v); }
+            return this;
+        }
+        public string encode () {
+            var sb = new StringBuilder ();
+            for (int i = 0; i < keys.length; i++) {
+                if (i > 0) sb.append_c ('&');
+                sb.append (Uri.escape_string (keys[i], "[]", false));
+                sb.append_c ('=');
+                sb.append (Uri.escape_string (vals[i], null, false));
+            }
+            return sb.str;
+        }
+    }
+
     public const int64 HOUR_MS = 3600 * 1000;
     public const int64 DAY_MS = 24 * HOUR_MS;
 

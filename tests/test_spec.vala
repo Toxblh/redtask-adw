@@ -286,6 +286,32 @@ void test_journal_labels () {
     }
 }
 
+/** Демо-режим (п. 6): выдуманный сервер в памяти — коды, логин, номера и total списков задач. */
+void test_demo_server () {
+    var v = spec.get_object_member ("demo_server");
+    var base_url = v.get_string_member ("base");
+    assert_cmpstr (DemoServer.BASE, CompareOperator.EQ, base_url);
+    foreach (var c in objs (v.get_array_member ("translit")))
+        assert_cmpstr (demo_translit (c.get_string_member ("first"), c.get_string_member ("last")), CompareOperator.EQ, c.get_string_member ("login"));
+    foreach (var c in objs (v.get_array_member ("requests"))) {
+        DemoServer.reset (c.get_string_member ("lang") == "ru");
+        var path = c.get_string_member ("path");
+        var r = DemoServer.handle (c.get_string_member ("method"), path.has_prefix ("/") ? base_url + path : path, null);
+        if (r.code != c.get_int_member ("code")) error ("demo %s: %u", path, r.code);
+        if (!c.has_member ("login") && !c.has_member ("ids")) continue;
+        var o = json_parse (((string) r.body.get_data ()).substring (0, (long) r.body.get_size ())).get_object ();
+        if (c.has_member ("login")) assert_cmpstr (jstr (jobj (o, "user"), "login"), CompareOperator.EQ, c.get_string_member ("login"));
+        if (c.has_member ("ids")) {
+            int[] got = {};
+            foreach (var i in jarr (o, "issues")) got += jint (i, "id");
+            var want = ints (c.get_array_member ("ids"));
+            if (got.length != want.length) error ("demo %s: %d issues", path, got.length);
+            for (int k = 0; k < want.length; k++) if (got[k] != want[k]) error ("demo %s: [%d] %d != %d", path, k, got[k], want[k]);
+            assert_cmpint (jint (o, "total_count"), CompareOperator.EQ, (int) c.get_int_member ("total"));
+        }
+    }
+}
+
 int main (string[] args) {
     Intl.setlocale (LocaleCategory.ALL, "C.UTF-8");
     Test.init (ref args);
@@ -297,7 +323,6 @@ int main (string[] args) {
     }
     spec = p.get_root ().get_object ();
     // новый раздел в наборах без теста здесь — провал, а не тихий пропуск
-    // demo_server — демо-режима в GNOME пока нет (spec 6, отклонение)
     string[] known = { "_", "demo_server", "status_kind", "note_link", "quote_reply", "project_pins", "version_progress", "assignee_filter", "board_columns", "notif_image", "wiki_link", "thumbnail_source", "embedded_thumbnail", "table_columns",
         "mention_query", "mention_candidates", "recent_opened", "board_filter", "zip_tail", "textile_table", "custom_tables", "assignee_avatars", "people_phones", "journal_labels" };
     foreach (var m in spec.get_members ()) if (!(m in known)) error ("vectors.json: section %s is not tested", m);
@@ -323,5 +348,6 @@ int main (string[] args) {
     Test.add_func ("/spec/assignee_avatars", test_assignee_avatars);
     Test.add_func ("/spec/people_phones", test_people_phones);
     Test.add_func ("/spec/journal_labels", test_journal_labels);
+    Test.add_func ("/spec/demo_server", test_demo_server);
     return Test.run ();
 }

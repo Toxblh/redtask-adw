@@ -14,6 +14,10 @@ namespace Redmine {
             // ---- общие ----
             var general = new Adw.PreferencesPage () { title = _("General"), icon_name = "emblem-system-symbolic" };
             var acc = new Adw.PreferencesGroup () { title = _("Account") };
+            if (DemoServer.is_demo (p.server_url)) {
+                acc.title = _("Demo");
+                acc.description = _("Demo mode: made-up data on this device only, nothing is sent anywhere. Changes are lost when the app restarts. Sign out to return to the sign-in screen.");
+            }
             var who = new Adw.ActionRow () { title = Markup.escape_text (p.user_name), subtitle = Markup.escape_text (p.server_url) };
             who.add_prefix (Avatars.make (p.user_id, p.user_name, 40));
             acc.add (who);

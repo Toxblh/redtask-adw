@@ -1352,3 +1352,15 @@ msgstr "Отпустите в тексте — прикрепить и вста�
 
 msgid "Drop here to attach only"
 msgstr "Отпустите здесь — только прикрепить"
+
+msgid "_Try Demo"
+msgstr "_Попробовать без сервера"
+
+msgid "No Redmine server at hand? Explore the app with sample data. Nothing is sent anywhere."
+msgstr "Нет под рукой сервера Redmine? Посмотрите приложение на примерах — ничего никуда не отправляется."
+
+msgid "Demo"
+msgstr "Демо"
+
+msgid "Demo mode: made-up data on this device only, nothing is sent anywhere. Changes are lost when the app restarts. Sign out to return to the sign-in screen."
+msgstr "Демо-режим: выдуманные данные только на этом устройстве, ничего никуда не отправляется. Изменения пропадут при перезапуске. «Выйти» вернёт на экран входа."

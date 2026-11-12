@@ -6,7 +6,9 @@ core_sources = files(
   'server_link.vala',
 )
 
-app_sources = core_sources + files(
+demo_sources = files('api/demo.vala')
+
+app_sources = core_sources + demo_sources + files(
   'application.vala',
   'api/client.vala',
   'store/settings.vala',
